@@ -1,0 +1,204 @@
+[project]
+name = 'appimage-manager'
+version = '0.1.0-alpha'
+license = { text = "GPL-3.0-or-later" }
+description = 'appimage-manager is a command-line tool to manage AppImages on Linux. It allows users to install, update, and manage AppImages from GitHub repositories easily. It is designed to simplify the process of handling AppImages, making it more convenient for users to keep their applications up-to-date.'
+keywords = ["appimage", "appimage-manager"]
+requires-python = ">= 3.12,<3.14"
+authors = [{ name = "Cyber-Syntax" }]
+dependencies = ["aiohttp>=3.12", "orjson>=3.10"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers, Linux Users",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: POSIX :: Linux",
+]
+readme = { file = "README.md", content-type = "text/markdown" }
+
+[project.urls]
+repository = "https://github.com/Cyber-Syntax/appimage-manager"
+issues = "https://github.com/Cyber-Syntax/appimage-manager/issues"
+changelog = "https://github.com/Cyber-Syntax/appimage-manager/blob/main/CHANGELOG.md"
+funding = "https://github.com/sponsors/Cyber-Syntax"
+documentation = "https://github.com/Cyber-Syntax/appimage-manager#readme"
+
+[project.scripts]
+appimage-manager = "appman.main:main"
+
+[dependency-groups]
+dev = ["pytest>=9", "mypy>=1", "pip-audit>=2"]
+lint = ["ruff>=0.15"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+managed = true
+required-environments = ["sys_platform == 'linux'"]
+exclude-newer = "7 days"
+
+[tool.setuptools.package-data]
+#NOTE: include all JSON files in the specified directories for inclusion in the package
+appman = ["catalog/*.json", "config/schemas/*.json"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["appman*"]
+
+[tool.coverage.paths]
+source = ["appman"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=src --cov-fail-under=80 --cov-report=html --cov-report=term-missing"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["src"]
+log_cli = false
+log_cli_level = "INFO"
+log_file_level = "DEBUG"
+log_cli_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+log_cli_date_format = "%H:%M:%S"
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+  "network: marks tests that make network requests to external services",
+  "e2e: marks end-to-end integration tests",
+]
+
+[tool.pytest_env]
+appman_LOG_DIR = { value = "/tmp/pytest-of-{USER}-logs", transform = true }
+
+[tool.ruff]
+line-length = 79
+indent-width = 4
+include = ["pyproject.toml", "src/**/*.py", "scripts/**/*.py", "tests/**/*.py"]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+#
+# This is currently disabled by default, but it is planned for this
+# to be opt-out in the future.
+docstring-code-format = false
+# set the line length limit used when formatting code snippets in
+# docstrings.
+#
+# This only has an effect when the `docstring-code-format` setting is
+# enabled.
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint]
+select = ["ALL"]
+# TID252: Prefer absolute imports over relative imports from parent modules
+# Enabled to auto-apply fixes for this rule
+extend-safe-fixes = ["TID252"]
+ignore = [
+  # only relevant if you run a script with `python -1`,
+  # which seems unlikely for any of the scripts in this repo
+  "B010",
+  # Ignoring E202 due to https://github.com/PyCQA/pycodestyle/issues/373.
+  "E202",
+  # Incompatible pydocstyle rules: ignoring D202 and D213
+  "D202",
+  "D212",
+  # Incompatible with google style docstrings
+  "D203",
+  "D211",
+  "D213",
+  # Incompatible with ruff formatter rules
+  "W191",   # tab-indentation
+  "E111",   # indentation-with-invalid-multiple
+  "E114",   # indentation-with-invalid-multiple-comment
+  "E117",   # over-indented
+  "D206",   # docstring-tab-indentation
+  "D300",   # triple-single-quotes
+  "Q000",   # bad-quotes-inline-string
+  "Q001",   # bad-quotes-multiline-string
+  "Q002",   # bad-quotes-docstring
+  "Q003",   # avoidable-escaped-quote
+  "COM812", # missing-trailing-comma
+  "COM819", # prohibited-trailing-comma
+  "CPY001", # Missing copyright notice at top of file
+  "ISC001", # multi-line-implicit-string-concatenation (if used without ISC002 and flake8-implicit-str-concat.allow-multiline = false)
+  "TD002",  # Missing author in TODO `# TODO(<author_name>): ...`
+  "TD003",  # missing-todo-link
+  # Leave it to the formatter to split long lines and
+  # the judgement of all of us.
+  # "E501"
+]
+
+# incompatible with the formatter's treatment of import statements
+[tool.ruff.lint.isort]
+force-single-line = false
+force-wrap-aliases = false
+split-on-trailing-comma = false
+# The number of blank lines to place after imports. Use -1 for automatic determination.
+# When using the formatter, only the values -1, 1, and 2 are compatible because it enforces at least one empty and at most two empty lines after imports.
+lines-after-imports = -1
+# The number of lines to place between "direct" and import from imports.
+# When using the formatter, only the values 0 and 1 are compatible because it preserves up to one empty line after imports in nested blocks.
+lines-between-types = 0
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = [
+  "INP001", # Scripts are standalone, not part of a package
+  "T201",   # print() is expected in CLI scripts
+]
+"test_*.py" = [
+  "S101",    # asserts allowed in tests...
+  "ARG",     # Unused function args -> fixtures nevertheless are functionally relevant...
+  "FBT",     # Don't care about booleans as positional arguments in tests, e.g. via @pytest.mark.parametrize()
+  "PLR2004", # Magic value used in comparison, ...
+  "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+  "ANN",     # No type annotations required in tests
+  "TRY003",  # Long exception messages are fine in tests
+  "EM101",   # String literals in exceptions are fine in tests
+  "S108",    # Insecure temp file paths are fine in tests (not real I/O)
+  "SLF001",  # Private member access is necessary for unit testing internal methods
+]
+
+[tool.ruff.lint.pydocstyle]
+# Use Google-style docstrings.
+convention = "google"
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 79
+
+[tool.coverage.run]
+source = ["src/appman"]
+omit = ["tests/*", "scripts/*", "**/__pycache__/*"]
+
+[tool.mypy]
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_no_return = true
+
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+check_untyped_defs = true
+
+warn_redundant_casts = true
+warn_unreachable = true
+show_error_codes = true
+
+[tool.pylint]
+extension-pkg-allow-list = ["orjson"]
