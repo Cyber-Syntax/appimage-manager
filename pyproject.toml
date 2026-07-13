@@ -27,7 +27,7 @@ funding = "https://github.com/sponsors/Cyber-Syntax"
 documentation = "https://github.com/Cyber-Syntax/appimage-manager#readme"
 
 [project.scripts]
-appimage-manager = "appman.main:main"
+appman = "appman.main:main"
 
 [dependency-groups]
 dev = ["pytest>=9", "mypy>=1", "pip-audit>=2"]
