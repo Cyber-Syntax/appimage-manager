@@ -203,6 +203,7 @@ class ErrorKind(Enum):
     VERIFICATION = "verification"
     PERMISSION = "permission"
     INTERNAL = "internal"
+    VALIDATION = "validation"
 
 
 class ErrorCode(Enum):
@@ -215,6 +216,7 @@ class ErrorCode(Enum):
     NETWORK_DNS_FAILURE = "network_dns_failure"
     CHECKSUM_MISMATCH = "checksum_mismatch"
     PERMISSION_DENIED = "permission_denied"
+    INVALID_URL = "invalid_url"
     UNKNOWN_ERROR = "unknown_error"
 
 
@@ -241,6 +243,10 @@ ERROR_MESSAGES: dict[ErrorCode, str] = {
     # Real, parseable mismatch — security-relevant, always blocks by default
     # (AGENTS.md §6.2). Never share this code with CHECKSUM_FILE_CORRUPT.
     ErrorCode.CHECKSUM_MISMATCH: "checksum verification failed",
+    ErrorCode.INVALID_URL: (
+        "invalid or unsupported repository URL: expected GitHub URL"
+        "Example: https://github.com/pbek/QOwnNotes"
+    ),
     ErrorCode.UNKNOWN_ERROR: "an unknown error occurred",
 }
 
@@ -283,4 +289,26 @@ WARNING_MESSAGES: dict[WarningCode, str] = {
         "checksum file could not be parsed : this is likely an upstream "
         "build-tooling issue, not a verification failure"
     ),
+}
+
+
+# ----------------------------------------------------------------------------
+# Typed infos
+# ----------------------------------------------------------------------------
+
+
+class InfoCode(Enum):
+    QUERYING_UPSTREAM_RELEASES = "querying_upstream_releases"
+    RETRIEVING_APPIMAGES = "retrieving_appimages"
+    PROCESSING_PACKAGE_CHANGES = "processing_package_changes"
+    CREATING_TRANSACTION_SUMMARY = "creating_transaction_summary"
+    DONE = "done"
+
+
+INFO_MESSAGES: dict[InfoCode, str] = {
+    InfoCode.QUERYING_UPSTREAM_RELEASES: ":: Querying upstream releases...",
+    InfoCode.RETRIEVING_APPIMAGES: ":: Retrieving appimages...",
+    InfoCode.PROCESSING_PACKAGE_CHANGES: ":: Processing package changes...",
+    InfoCode.CREATING_TRANSACTION_SUMMARY: ":: Creating transaction summary...",
+    InfoCode.DONE: ":: Done.",
 }

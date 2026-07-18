@@ -30,7 +30,7 @@ documentation = "https://github.com/Cyber-Syntax/appimage-manager#readme"
 appman = "appman.main:main"
 
 [dependency-groups]
-dev = ["pytest>=9", "mypy>=1", "pip-audit>=2"]
+dev = ["pytest>=9", "mypy>=1", "pip-audit>=2", "pytest-cov>=4"]
 lint = ["ruff>=0.15"]
 
 [build-system]

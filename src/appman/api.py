@@ -126,7 +126,14 @@ def select_appimage_asset(
 # and checksum_file and than use those to download
 # both and than verify
 def parse_asset(raw: dict[str, Any]) -> Asset:
-    """Convert a raw GitHub API asset dict into an Asset."""
+    """Convert a raw GitHub API asset dict into an Asset.
+
+    Arguments:
+        raw: The raw asset dictionary from the GitHub API.
+
+    Returns:
+        The parsed Asset object.
+    """
     name = raw["name"]
     raw_digest = raw.get("digest")  # e.g "sha256:abc123..."
     # get the digest only, not sha256
@@ -141,15 +148,30 @@ def parse_asset(raw: dict[str, Any]) -> Asset:
 
 
 def classify_asset_type(name: str) -> AssetType:
-    """Classify a filename as AppImage, checksum file, or digest."""
+    """Classify a filename as AppImage, checksum file, or digest.
+
+    Arguments:
+        name: The name of the filename to classify.
+
+    Returns:
+        The type of the asset.
+    """
     lower = name.lower()
     if lower.endswith(".appimage"):
         return AssetType.APPIMAGE
     return AssetType.CHECKSUM_FILE
 
 
-# TODO: add google-style docstrings and comments for this functions
 def is_incompatible_platform(name: str) -> bool:
+    """Check if the asset name indicates an incompatible platform.
+
+    Arguments:
+        name: The name of the asset.
+
+    Returns:
+        True if the asset is incompatible with the current platform,
+        False otherwise.
+    """
     lower = name.lower()
     if lower.endswith(INCOMPATIBLE_PLATFORM_EXTENSIONS):
         return True
@@ -159,10 +181,26 @@ def is_incompatible_platform(name: str) -> bool:
 
 
 def is_unstable(name: str) -> bool:
+    """Check if the asset name indicates an unstable version.
+
+    Arguments:
+        name: The name of the asset.
+
+    Returns:
+        True if the asset indicates an unstable version, False otherwise.
+    """
     lower = name.lower()
     return any(kw in lower for kw in UNSTABLE_VERSION_KEYWORDS)
 
 
 def is_amd64(name: str) -> bool:
+    """Check if the asset name indicates an AMD64 platform.
+
+    Arguments:
+        name: The name of the asset.
+
+    Returns:
+        True if the asset indicates an AMD64 platform, False otherwise.
+    """
     lower = name.lower()
     return "x86_64" in lower or "amd64" in lower

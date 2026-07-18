@@ -1,3 +1,15 @@
+"""Logging setup for appman.
+
+appman keeps stdout clean for real command output, so logs and progress
+messages go to stderr instead. That makes commands safe to pipe into tools
+like grep or jq without extra noise.
+
+# NOTE:
+    file_handler -> it directly write file, it isn't stderr or stdout
+    print        -> stdout user facing output/result only
+    logger       -> info/debug etc. stderr so user pipe only prints
+"""
+
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
@@ -20,7 +32,7 @@ def init_log() -> None:
     )
 
     # console handler
-    ch = logging.StreamHandler(sys.stdout)
+    ch = logging.StreamHandler(sys.stderr)
     ch.setLevel(logging.INFO)
     ch.setFormatter(logging.Formatter("%(message)s"))
 

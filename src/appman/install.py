@@ -15,12 +15,16 @@ from .api import (
 )
 from .constants import APPIMAGES_DIR
 from .download import download_and_verify
-from .main import init_config
 from .models import (
+    INFO_MESSAGES,
     WARNING_MESSAGES,
+    ErrorCode,
+    ErrorKind,
+    InfoCode,
     PackageError,
     PackageWarning,
     SelectedAssets,
+    Stage,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,13 +64,20 @@ def _exit_with_error(error: PackageError) -> None:
 
 # TODO: I probably need to return PackageError instead of raise here:
 # FIXME: typeerrors
-async def _install_async(url: str) -> None:
+async def _install_async(url: str) -> None | PackageError:
     """Run the install flow for one GitHub repository URL."""
     try:
+        logger.debug("Parsing GitHub URL: %s", url)
         owner, repo = parse_github_url(url)
     except ValueError as exc:
         logger.error(f"appman: {exc}")
-        raise SystemExit(1) from exc
+        return PackageError(
+            package=url,
+            kind=ErrorKind.VALIDATION,
+            code=ErrorCode.INVALID_URL,
+            stage=Stage.QUERY.value,
+            retryable=False,
+        )
 
     package = repo
 
@@ -75,14 +86,14 @@ async def _install_async(url: str) -> None:
     ) as session:
         release = await fetch_latest_release(session, owner, repo, package)
         if isinstance(release, PackageError):
-            _exit_with_error(release)
+            return release
 
         cache_release_data(owner, repo, release)
 
         assets = release.get("assets", [])
         selected_appimage = select_appimage_asset(assets, package)
         if isinstance(selected_appimage, PackageError):
-            _exit_with_error(selected_appimage)
+            return selected_appimage
 
         selected = SelectedAssets(appimage=selected_appimage)
 
@@ -93,18 +104,23 @@ async def _install_async(url: str) -> None:
             dest_dir=APPIMAGES_DIR,
         )
         if isinstance(result, PackageError):
-            _exit_with_error(result)
+            return result
 
         appimage_path, verification, warnings = result
 
-        logger.info("Downloaded: %s", appimage_path)
-        logger.info("Verification: %s", verification.status.value)
+        logger.debug("Downloaded: %s", appimage_path)
+        logger.debug("Verification: %s", verification.status.value)
 
         for warning in warnings:
             _print_package_warning(warning)
 
+        return None  # success
+
 
 def install(url: str) -> None:
     """Install an AppImage from a GitHub repository URL."""
-    init_config()
-    asyncio.run(_install_async(url))
+    logger.info("%s", INFO_MESSAGES[InfoCode.QUERYING_UPSTREAM_RELEASES])
+    logger.debug("Installing from URL: %s", url)
+    result = asyncio.run(_install_async(url))
+    if isinstance(result, PackageError):
+        _exit_with_error(result)
