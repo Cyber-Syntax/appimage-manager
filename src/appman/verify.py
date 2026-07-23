@@ -249,6 +249,9 @@ def _sha256_file(path: Path) -> str:
 
     # Read the file in chunks to avoid loading the entire file into memory
     with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(CHUNK_SIZE), b""):
+        while True:
+            chunk = fh.read(CHUNK_SIZE)
+            if not chunk:
+                break
             hasher.update(chunk)
     return hasher.hexdigest()
