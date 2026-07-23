@@ -13,7 +13,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # TODO: refactor google style docstrings
 
@@ -24,27 +27,47 @@ from pathlib import Path
 
 @dataclass(slots=True)
 class DownloadedAsset:
-    """A single asset that has been written to disk."""
+    """A single asset that has been written to disk.
+
+    Arguments:
+        asset: the Asset that was downloaded (Asset)
+        path: the path on disk where the asset was written (Path)
+    """
 
     asset: Asset
     path: Path
 
 
 class AssetType(Enum):
+    """Classifies a release asset for appman-internal purposes.
+
+    Arguments:
+        APPIMAGE: the asset is an AppImage
+        CHECKSUM_FILE: the asset is a checksum file (e.g. .DIGEST.txt)
+    """
+
     APPIMAGE = "AppImage"
     CHECKSUM_FILE = "checksum_file"
 
 
 @dataclass(frozen=True, slots=True)
 class Asset:
-    """A single raw release asset, parsed from the GitHub API response."""
+    """A single raw release asset, parsed from the GitHub API response.
+
+    Arguments:
+        name: the name of the asset (e.g. "MyApp-x86_64.AppImage")
+        download_url: the URL to download the asset
+        size: the size of the asset in bytes
+        asset_type: the type of the asset (AppImage or checksum file)
+                    (AssetType)
+        digest: the SHA256 digest of the asset, if provided by GitHub
+                (e.g "sha256:abc123..." -> stored hex-only); None otherwise
+    """
 
     name: str
     download_url: str
     size: int
     asset_type: AssetType
-    # GitHub API-embedded digest, e.g. "sha256:abc123..." -> stored hex-only.
-    # None if GitHub didn't supply one for this asset.
     digest: str | None
 
 
@@ -55,7 +78,19 @@ class Asset:
 
 @dataclass(slots=True)
 class AppConfig:
-    """Per-app persisted config (state JSON), one file per installed app."""
+    """Per-app persisted config (state JSON), one file per installed app.
+
+    Arguments:
+        name: canonical name of the app (used in config file names, etc.)
+        repo: GitHub repository (owner/repo)
+        installed_version: the version string of the installed AppImage
+        appimage_path: path to the installed AppImage
+        desktop_file_path: path to the installed .desktop file (if any)
+        icon_path: path to the installed icon file (if any)
+        skip_verify: whether the user has opted to skip verification
+        created_from_catalog: whether this app was installed from the catalog
+        catalog_id: the ID of the catalog entry (if any) that was used to install
+    """
 
     name: str
     repo: str
@@ -73,9 +108,18 @@ class CatalogEntry:
     """Maintainer-curated override for a catalog app.
 
     Catalog rules always take precedence over generic GitHub-inferred
-    defaults (AGENTS.md §5). `allow_skip_verify` is a UX hint, not a bypass
-    — see AGENTS.md §8.1: appman still checks for a digest/checksum on
-    every run regardless of this flag.
+    defaults. `allow_skip_verify` is a UX hint that prevents asking the
+    same skip verification question to the user every time, not a bypass
+    — appman still checks for a digest/checksum on every run regardless
+    of this flag.
+
+    Arguments:
+        name: canonical name of the app (used in config file names, etc.)
+        repo: GitHub repository (owner/repo)
+        default_asset_pattern: optional regex pattern to select the AppImage
+        allow_prerelease: whether to allow prerelease versions
+        allow_skip_verify: whether to allow users to skip verification
+        architecture: the architecture of the app (default: x86_64)
     """
 
     name: str
@@ -94,17 +138,35 @@ class ReleaseAsset:
     `Asset` is the appman-internal, classified representation produced by
     `parse_asset`. Kept separate so api.py doesn't need to know about
     AssetType classification rules.
+
+    Arguments:
+        name: the name of the asset (e.g. "MyApp-x86_64.AppImage")
+        download_url: the URL to download the asset
+        size: the size of the asset in bytes
+        content_type: the MIME type of the asset (e.g. "application/octet-stream")
+        digest: the SHA256 digest of the asset, if provided by GitHub
+                (e.g "sha256:abc123..." -> stored hex-only); None otherwise
     """
 
     name: str
     download_url: str
     size: int
     content_type: str
+    digest: str | None = None
 
 
 @dataclass(slots=True)
 class GitHubRelease:
-    """A parsed GitHub release, ready for asset-selection (ARCHITECTURE.md §8)."""
+    """A parsed GitHub release, ready for asset-selection.
+
+    Arguments:
+        tag_name: the Git tag name of the release (e.g. "v1.2.3")
+        release_name: the human-readable name of the release (e.g. "MyApp 1.2.3")
+        prerelease: whether the release is a prerelease
+        published_at: the ISO 8601 timestamp of when the release was published
+        assets: a list of ReleaseAsset objects associated with the release
+                (ReleaseAsset)
+    """
 
     tag_name: str
     release_name: str
@@ -121,6 +183,10 @@ class SelectedAssets:
     through every function (AGENTS.md §9). `checksum_file` is None if the
     release has no checksum/.DIGEST asset — that's a normal, expected case,
     not an error.
+
+    Arguments:
+        appimage: the selected AppImage asset (Asset)
+        checksum_file: the selected checksum file asset (Asset) or None if not present
     """
 
     appimage: Asset
@@ -132,7 +198,17 @@ class SelectedAssets:
 # ---------------------------------------------------------------------------
 
 
-class VerificationStatus(str, Enum):
+class VerificationStatus(Enum):
+    """Verification status of an AppImage against digest and/or checksum file.
+
+    Arguments:
+        VERIFIED: the AppImage was successfully verified
+        FAILED: the AppImage failed verification
+        MISSING: the AppImage could not be verified because the checksum file
+                 or digest was missing
+        SKIPPED: the AppImage verification was skipped (user opted out)
+    """
+
     VERIFIED = "verified"
     FAILED = "failed"
     MISSING = "missing"
@@ -143,8 +219,16 @@ class VerificationStatus(str, Enum):
 class ChecksumResult:
     """Outcome of verifying one AppImage against digest and/or checksum file.
 
-    `method` distinguishes partial vs. full verification per AGENTS.md §8.2:
+    `method` distinguishes partial vs. full verification per
     "digest", "checksum_file", or "digest+checksum_file" when both passed.
+
+    Arguments:
+        status: the verification status (VERIFIED, FAILED, MISSING, SKIPPED)
+                (VerificationStatus)
+        method: the method used for verification (digest, checksum_file, or both)
+        expected_hash: the expected hash value (from digest or checksum file)
+        actual_hash: the actual hash value computed from the downloaded AppImage
+        source_file: the source of the expected hash (digest or checksum file)
     """
 
     status: VerificationStatus
@@ -160,6 +244,18 @@ class ChecksumResult:
 
 
 class Stage(Enum):
+    """Internal orchestration stage.
+
+    Stages are used for fine-grained progress reporting and logging.
+
+    Arguments:
+        QUERY: querying upstream releases
+        DOWNLOAD: downloading assets
+        VERIFY: verifying downloaded assets
+        INSTALL: installing assets
+        UPDATE: updating installed assets
+    """
+
     QUERY = "query"
     DOWNLOAD = "download"
     VERIFY = "verify"
@@ -168,8 +264,16 @@ class Stage(Enum):
 
 
 class Phase(Enum):
-    """Internal orchestration phase — coarser-grained than Stage, used for
-    progress/event reporting rather than error attribution.
+    """Internal orchestration phase.
+
+    Phases are used for higher-level progress reporting and logging.
+
+    Arguments:
+        QUERY: querying upstream releases
+        DOWNLOAD: downloading assets
+        VERIFY: verifying downloaded assets
+        INSTALL: installing assets
+        SUMMARY: summarizing the transaction
     """
 
     QUERY = auto()
@@ -180,7 +284,16 @@ class Phase(Enum):
 
 
 class Event(Enum):
-    """Emitted during install/update for progress reporting (--verbose, TUI)."""
+    """Emitted during install/update for progress reporting (--verbose, TUI).
+
+    Arguments:
+        DOWNLOAD_STARTED: download of an asset has started
+        DOWNLOAD_FINISHED: download of an asset has finished
+        APPIMAGE_VERIFIED: AppImage has been successfully verified
+        APPIMAGE_VERIFICATION_SKIPPED: AppImage verification was skipped
+        APPIMAGE_INSTALLED: AppImage has been successfully installed
+        APPIMAGE_FAILED: AppImage installation failed
+    """
 
     DOWNLOAD_STARTED = auto()
     DOWNLOAD_FINISHED = auto()
@@ -196,7 +309,16 @@ class Event(Enum):
 
 
 class ErrorKind(Enum):
-    """Broad category — used for --json grouping and log filtering."""
+    """Broad category — used for --json grouping and log filtering.
+
+    Arguments:
+        NETWORK: network-related errors (timeouts, DNS failures)
+        ASSET: asset-related errors (missing, malformed, etc.)
+        VERIFICATION: verification-related errors (checksum mismatches, etc.)
+        PERMISSION: permission-related errors (file system, access denied)
+        INTERNAL: internal errors (unexpected exceptions, logic errors)
+        VALIDATION: validation errors (invalid input, unsupported URLs)
+    """
 
     NETWORK = "network"
     ASSET = "asset"
@@ -207,8 +329,16 @@ class ErrorKind(Enum):
 
 
 class ErrorCode(Enum):
-    """Exact issue. Add a member here + an ERROR_MESSAGES entry when adding
-    a new failure mode — never inline a user-facing string elsewhere.
+    """Error codes are used for structured error reporting and logging.
+
+    Arguments:
+        APPIMAGE_ASSET_NOT_FOUND: the AppImage asset was not found in the release
+        NETWORK_TIMEOUT: a network timeout occurred while downloading an asset
+        NETWORK_DNS_FAILURE: DNS resolution failed for the upstream host
+        CHECKSUM_MISMATCH: the checksum verification failed for the downloaded asset
+        PERMISSION_DENIED: permission denied when accessing a file or directory
+        INVALID_URL: the provided repository URL is invalid or unsupported
+        UNKNOWN_ERROR: an unknown error occurred
     """
 
     APPIMAGE_ASSET_NOT_FOUND = "appimage_asset_not_found"
@@ -222,7 +352,15 @@ class ErrorCode(Enum):
 
 @dataclass(slots=True)
 class PackageError:
-    """Returned, never raised, across module boundaries (AGENTS.md §6)."""
+    """Returned, never raised, across module boundaries.
+
+    Arguments:
+        package: the name of the package that encountered the error
+        kind: the broad category of the error (ErrorKind)
+        code: the specific error code (ErrorCode)
+        stage: the stage of the transaction where the error occurred (Stage)
+        retryable: whether the error is retryable (default: False)
+    """
 
     package: str
     kind: ErrorKind
@@ -241,10 +379,10 @@ ERROR_MESSAGES: dict[ErrorCode, str] = {
     ErrorCode.NETWORK_DNS_FAILURE: "could not resolve upstream host",
     ErrorCode.PERMISSION_DENIED: "permission denied",
     # Real, parseable mismatch — security-relevant, always blocks by default
-    # (AGENTS.md §6.2). Never share this code with CHECKSUM_FILE_CORRUPT.
+    # Never share this code with CHECKSUM_FILE_CORRUPT.
     ErrorCode.CHECKSUM_MISMATCH: "checksum verification failed",
     ErrorCode.INVALID_URL: (
-        "invalid or unsupported repository URL: expected GitHub URL"
+        "invalid or unsupported repository URL: expected GitHub URL. "
         "Example: https://github.com/pbek/QOwnNotes"
     ),
     ErrorCode.UNKNOWN_ERROR: "an unknown error occurred",
@@ -257,20 +395,38 @@ ERROR_MESSAGES: dict[ErrorCode, str] = {
 
 
 class WarningCode(Enum):
-    """Non-fatal issue. Same rule as ErrorCode: add a member + message here,
-    don't invent ad hoc strings inline.
+    """Warning codes are used for structured warning reporting and logging.
+
+    Note:
+        File present but unparseable/malformed (common with Electron-style
+        build pipelines) — a data-quality problem, NOT a security failure,
+        and must not block install on its own if another method passes.
+
+    Arguments:
+        NO_CHECKSUM_SKIPPED: no checksum was provided by upstream,
+                             skipping verification
+        NO_CHECKSUM_UNSUPPORTED: checksum asset not found, some developers
+                                 may not provide any
+        CHECKSUM_FILE_CORRUPT: checksum file could not be parsed,
+                               likely an upstream build-tooling issue,
+                               not a verification failure
     """
 
     NO_CHECKSUM_SKIPPED = "no_checksum_skipped"
     NO_CHECKSUM_UNSUPPORTED = "no_checksum_unsupported"
-    # File present but unparseable/malformed (common with Electron-style
-    # build pipelines) — a data-quality problem, NOT a security failure,
-    # and must not block install on its own if another method passes.
     CHECKSUM_FILE_CORRUPT = "checksum_file_corrupt"
 
 
 @dataclass(slots=True)
 class PackageWarning:
+    """Returned, never raised, across module boundaries.
+
+    Arguments:
+        package: the name of the package that encountered the warning
+        code: the specific warning code (WarningCode)
+        stage: the stage of the transaction where the warning occurred (Stage)
+    """
+
     package: str
     code: WarningCode
     stage: str
@@ -281,7 +437,7 @@ WARNING_MESSAGES: dict[WarningCode, str] = {
         "no checksum provided by upstream : skipping verification"
     ),
     WarningCode.NO_CHECKSUM_UNSUPPORTED: (
-        "checksum asset not found : some developers not provide any, please "
+        "checksum asset not found : some developers do not provide any, please "
         "report an issue for the package maintainers if you verified this "
         "isn't appman's fault"
     ),
@@ -298,6 +454,16 @@ WARNING_MESSAGES: dict[WarningCode, str] = {
 
 
 class InfoCode(Enum):
+    """Info codes are used for structured info reporting and logging.
+
+    Arguments:
+        QUERYING_UPSTREAM_RELEASES: querying upstream releases
+        RETRIEVING_APPIMAGES: retrieving appimages
+        PROCESSING_PACKAGE_CHANGES: processing package changes
+        CREATING_TRANSACTION_SUMMARY: creating transaction summary
+        DONE: done
+    """
+
     QUERYING_UPSTREAM_RELEASES = "querying_upstream_releases"
     RETRIEVING_APPIMAGES = "retrieving_appimages"
     PROCESSING_PACKAGE_CHANGES = "processing_package_changes"

@@ -23,9 +23,6 @@ from .models import (
 from .verify import verify_downloaded_appimage
 
 
-# find the browser_download_url for appimage
-# find checksum_file browser_download_url if exist else skip
-# request download for that appimage
 async def _download_asset(
     session: aiohttp.ClientSession,
     asset: Asset,
@@ -34,8 +31,20 @@ async def _download_asset(
 ) -> DownloadedAsset | PackageError:
     """Stream one asset to disk under DOWNLOAD_SEMAPHORE.
 
-    Never raises across the module boundry, network and HTTP failures
-    come back as PackageError.
+    This function downloads an asset from the given URL and saves it
+    to the specified destination directory. It uses a semaphore to limit
+    concurrent downloads.
+
+    Args:
+        session: The aiohttp client session to use for the download.
+        asset: The Asset object representing the asset to download.
+        dest_dir: The destination directory to save the downloaded asset.
+        package: The name of the package being downloaded.
+
+    Returns:
+        DownloadedAsset: The result of the download, including the path to
+                         the downloaded file.
+        PackageError: If the download fails due to network or HTTP errors.
     """
     dest_path = dest_dir / asset.name
     timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=60)
@@ -82,6 +91,7 @@ async def _download_asset(
     return DownloadedAsset(asset=asset, path=dest_path)
 
 
+# TODO: we might change checksum install seperate function?
 # FIXME: type errors
 async def download_and_verify(
     session: aiohttp.ClientSession,
@@ -89,7 +99,20 @@ async def download_and_verify(
     selected: SelectedAssets,
     dest_dir: Path,
 ) -> tuple[Path, ChecksumResult, list[PackageWarning]] | PackageError:
-    """Download the AppImage ( + checksum_file if detected) concurrently then verify."""
+    """Download the AppImage (+checksum_file if detected) concurrently then verify.
+
+    Args:
+        session: The aiohttp client session to use for the download.
+        package: The name of the package being downloaded.
+        selected: The SelectedAssets object containing the assets to download.
+        dest_dir: The destination directory to save the downloaded assets.
+
+    Returns:
+        tuple: The path to the downloaded AppImage, the result of the checksum
+               verification, and any warnings encountered during verification.
+        PackageError: If the download or verification fails due to network,
+                      HTTP, or checksum errors.
+    """
     tasks: list[asyncio.Task] = [
         asyncio.ensure_future(
             _download_asset(session, selected.appimage, dest_dir, package)

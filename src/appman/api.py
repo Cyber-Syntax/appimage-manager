@@ -17,7 +17,14 @@ from .models import Asset, AssetType, ErrorCode, ErrorKind, PackageError, Stage
 
 
 def parse_github_url(url: str) -> tuple[str, str]:
-    """Extract the repository owner and name from a GitHub URL."""
+    """Extract the repository owner and name from a GitHub URL.
+
+    Args:
+        url: The GitHub repository URL.
+
+    Returns:
+        tuple[str, str]: A tuple containing the owner and repository name.
+    """
     # Regex pattern to capture owner and repo
     # Handles: https://github.com/owner/repo | https://github.com/owner/repo.git | git@github.com:owner/repo.git
     pattern = r"(?:https?://github\.com/|git@github\.com:)(?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?"
@@ -30,13 +37,21 @@ def parse_github_url(url: str) -> tuple[str, str]:
     return match.group("owner"), match.group("repo")
 
 
-# 4. create new function to request via github api to get json file in return
-
-
 async def fetch_latest_release(
     session: aiohttp.ClientSession, owner: str, repo: str, package: str
 ) -> dict[str, Any] | PackageError:
-    """Fetch latest release from github."""
+    """Fetch latest release from github.
+
+    Args:
+        session: The aiohttp session to use for the request.
+        owner: The owner of the GitHub repository.
+        repo: The name of the GitHub repository.
+        package: The package name for error reporting.
+
+    Returns:
+        dict[str, Any]: The latest release data if successful.
+        PackageError: If an error occurs during the fetch.
+    """
     url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
 
     async with API_SEMAPHORE:
@@ -77,6 +92,16 @@ async def fetch_latest_release(
 # e.g if something fail we can retry to install same than we could use cache directly
 # to get the browser_download_url etc. from that raw returned json file in that cache json
 def cache_release_data(owner: str, repo: str, data: dict[str, Any]) -> None:
+    """Cache the latest release data for a GitHub repository.
+
+    Args:
+        owner: The owner of the GitHub repository.
+        repo: The name of the GitHub repository.
+        data: The release data to cache.
+
+    Returns:
+        None
+    """
     cache_path = CACHE_DIR / f"{owner}_{repo}_latest.json"
 
     with cache_path.open("wb") as file:
@@ -86,7 +111,16 @@ def cache_release_data(owner: str, repo: str, data: dict[str, Any]) -> None:
 def select_appimage_asset(
     assets: list[dict[str, Any]], package: str
 ) -> Asset | PackageError:
-    """Find the best AppImage asset from a GitHub release's raw asset list."""
+    """Find the best AppImage asset from a GitHub release's raw asset list.
+
+    Args:
+        assets: The list of raw asset dictionaries from the GitHub API.
+        package: The package name for error reporting.
+
+    Returns:
+        Asset: The best AppImage asset.
+        PackageError: If no suitable AppImage is found.
+    """
     parsed = [parse_asset(raw) for raw in assets]
     appimages = [
         appimage
@@ -99,7 +133,6 @@ def select_appimage_asset(
         if not is_incompatible_platform(appimage.name)
     ]
 
-    # TODO: might be better to return useful error from known text?
     if not candidates:
         return PackageError(
             package=package,
@@ -121,10 +154,6 @@ def select_appimage_asset(
     )
 
 
-# TODO: we probably need to use this function to
-# parse browser_download_url for appimage
-# and checksum_file and than use those to download
-# both and than verify
 def parse_asset(raw: dict[str, Any]) -> Asset:
     """Convert a raw GitHub API asset dict into an Asset.
 

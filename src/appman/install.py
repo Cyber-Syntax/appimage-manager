@@ -30,10 +30,15 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
-# TODO: make sure about the structure for this module
-# clean up the code and make sure about the flow of the install process
 def _print_package_error(error: PackageError) -> None:
-    """Print a structured install failure message."""
+    """Print a structured install failure message.
+
+    Args:
+        error: The package error to print.
+
+    Returns:
+        None
+    """
     logger.error(
         "%s: %s/%s at %s (retryable=%s)",
         error.package,
@@ -45,7 +50,14 @@ def _print_package_error(error: PackageError) -> None:
 
 
 def _print_package_warning(warning: PackageWarning) -> None:
-    """Print a structured install warning message."""
+    """Print a structured install warning message.
+
+    Args:
+        warning: The package warning to print.
+
+    Returns:
+        None
+    """
     message = WARNING_MESSAGES.get(warning.code, warning.code.value)
     logger.warning(
         "%s: %s at %s - %s",
@@ -57,20 +69,35 @@ def _print_package_warning(warning: PackageWarning) -> None:
 
 
 def _exit_with_error(error: PackageError) -> None:
-    """Print a package error and terminate the install flow."""
+    """Print a package error and terminate the install flow.
+
+    Args:
+        error: The package error to print.
+
+    Raises:
+        SystemExit: Always raised to terminate the install flow.
+
+    Returns:
+        None
+    """
     _print_package_error(error)
     raise SystemExit(1)
 
 
-# TODO: I probably need to return PackageError instead of raise here:
-# FIXME: typeerrors
 async def _install_async(url: str) -> None | PackageError:
-    """Run the install flow for one GitHub repository URL."""
+    """Run the install flow for one GitHub repository URL.
+
+    Args:
+        url: The GitHub repository URL to install from.
+
+    Returns:
+        None if the installation is successful,
+        PackageError if an error occurs.
+    """
     try:
         logger.debug("Parsing GitHub URL: %s", url)
         owner, repo = parse_github_url(url)
-    except ValueError as exc:
-        logger.error(f"appman: {exc}")
+    except ValueError:
         return PackageError(
             package=url,
             kind=ErrorKind.VALIDATION,
@@ -81,6 +108,9 @@ async def _install_async(url: str) -> None | PackageError:
 
     package = repo
 
+    # NOTE: Using aiohttp.ClientSession to manage HTTP requests and responses
+    # this allows for efficient handling of multiple requests and responses,
+    # as well as connection pooling and session management.
     async with aiohttp.ClientSession(
         headers={"Accept": "application/vnd.github+json"}
     ) as session:
@@ -88,6 +118,7 @@ async def _install_async(url: str) -> None | PackageError:
         if isinstance(release, PackageError):
             return release
 
+        # TODO: use cache for later retry or same app version install
         cache_release_data(owner, repo, release)
 
         assets = release.get("assets", [])
@@ -118,7 +149,14 @@ async def _install_async(url: str) -> None | PackageError:
 
 
 def install(url: str) -> None:
-    """Install an AppImage from a GitHub repository URL."""
+    """Install an AppImage from a GitHub repository URL.
+
+    Args:
+        url: The GitHub repository URL to install from.
+
+    Returns:
+        None
+    """
     logger.info("%s", INFO_MESSAGES[InfoCode.QUERYING_UPSTREAM_RELEASES])
     logger.debug("Installing from URL: %s", url)
     result = asyncio.run(_install_async(url))

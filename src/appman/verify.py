@@ -30,7 +30,7 @@ def _parse_checksum_file(content: str, target_name: str) -> str | None:
 
     Handles `sha256sum`-style lines (`<hash>  <filename>`) and bare-hash
     `.DIGEST` files with no filename. Returns None if unparseable — caller
-    records CHECKSUM_FILE_CORRUPT (AGENTS.md §6.2), not a hard failure.
+    records CHECKSUM_FILE_CORRUPT, not a hard failure.
 
     Args:
         content: The text of the checksum file.
@@ -234,9 +234,8 @@ def verify_downloaded_appimage(
     return result, warnings
 
 
-# verify via github_digest/checksum_file if exist
 def _sha256_file(path: Path) -> str:
-    """Stream-hash a file. Sync and cheap by design, verify never runs concurrent.
+    """Compute the SHA256 hash of a file.
 
     Args:
         path: The path to the file to hash.
@@ -247,6 +246,8 @@ def _sha256_file(path: Path) -> str:
     hasher = hashlib.sha256()
 
     logger.debug("Computing SHA256 for file: %s", path)
+
+    # Read the file in chunks to avoid loading the entire file into memory
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(CHUNK_SIZE), b""):
             hasher.update(chunk)
