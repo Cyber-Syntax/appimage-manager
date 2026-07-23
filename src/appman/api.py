@@ -1,5 +1,6 @@
 """Utilities for interacting with the GitHub API."""
 
+import logging
 import re
 from typing import Any
 
@@ -15,24 +16,34 @@ from .constants import (
 )
 from .models import Asset, AssetType, ErrorCode, ErrorKind, PackageError, Stage
 
+logger = logging.getLogger(__name__)
 
-def parse_github_url(url: str) -> tuple[str, str]:
+
+def parse_github_url(url: str) -> tuple[str, str] | PackageError:
     """Extract the repository owner and name from a GitHub URL.
 
     Args:
         url: The GitHub repository URL.
 
     Returns:
-        tuple[str, str]: A tuple containing the owner and repository name.
+        tuple: A tuple containing the owner and repository name if successful.
+        PackageError: If the URL is invalid or unsupported.
     """
     # Regex pattern to capture owner and repo
-    # Handles: https://github.com/owner/repo | https://github.com/owner/repo.git | git@github.com:owner/repo.git
+    # Handles: https://github.com/owner/repo | https://github.com/owner/repo.git
+    # | git@github.com:owner/repo.git
     pattern = r"(?:https?://github\.com/|git@github\.com:)(?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?"
 
+    logger.debug("Parsing GitHub URL: %s", url)
     match = re.search(pattern, url)
     if not match:
-        msg = f"Invalid or unsupported GitHub URL: '{url}'"
-        raise ValueError(msg)
+        return PackageError(
+            package=url,
+            kind=ErrorKind.VALIDATION,
+            code=ErrorCode.INVALID_URL,
+            stage=Stage.QUERY.value,
+            retryable=False,
+        )
 
     return match.group("owner"), match.group("repo")
 
@@ -52,6 +63,7 @@ async def fetch_latest_release(
         dict[str, Any]: The latest release data if successful.
         PackageError: If an error occurs during the fetch.
     """
+    logger.debug("Fetching latest release for %s/%s", owner, repo)
     url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
 
     async with API_SEMAPHORE:
@@ -59,6 +71,7 @@ async def fetch_latest_release(
             async with session.get(
                 url, timeout=aiohttp.ClientTimeout(total=15)
             ) as response:
+                logger.debug("Received response: %s", response)
                 if response.status == 404:
                     return PackageError(
                         package=package,
@@ -87,9 +100,8 @@ async def fetch_latest_release(
             )
 
 
-# 5. save it to the cache while still on memory
-# keep using memory but cache might be needed on later usage for same app install
-# e.g if something fail we can retry to install same than we could use cache directly
+# TODO: use cache for later retry or same app version install
+# if something fail we can retry to install same than we could use cache directly
 # to get the browser_download_url etc. from that raw returned json file in that cache json
 def cache_release_data(owner: str, repo: str, data: dict[str, Any]) -> None:
     """Cache the latest release data for a GitHub repository.
@@ -106,6 +118,7 @@ def cache_release_data(owner: str, repo: str, data: dict[str, Any]) -> None:
 
     with cache_path.open("wb") as file:
         file.write(orjson.dumps(data))
+    logger.debug("Cached release data to: %s", cache_path)
 
 
 def select_appimage_asset(
@@ -121,19 +134,21 @@ def select_appimage_asset(
         Asset: The best AppImage asset.
         PackageError: If no suitable AppImage is found.
     """
+    logger.debug("Selecting AppImage asset from %d assets", len(assets))
     parsed = [parse_asset(raw) for raw in assets]
     appimages = [
         appimage
         for appimage in parsed
         if appimage.asset_type == AssetType.APPIMAGE
     ]
-    candidates = [
+    matches = [
         appimage
         for appimage in appimages
         if not is_incompatible_platform(appimage.name)
     ]
+    logger.debug("Found %d match AppImage assets", len(matches))
 
-    if not candidates:
+    if not matches:
         return PackageError(
             package=package,
             kind=ErrorKind.ASSET,
@@ -143,14 +158,16 @@ def select_appimage_asset(
         )
 
     stable = [
-        appimage for appimage in candidates if not is_unstable(appimage.name)
+        appimage for appimage in matches if not is_unstable(appimage.name)
     ]
     # keep all-beta apps to support freetube and similar always beta apps
-    candidates = stable or candidates
+    matches = stable or matches
+
+    logger.debug("Final match AppImage assets: %d", len(matches))
 
     return next(
-        (appimage for appimage in candidates if is_amd64(appimage.name)),
-        candidates[0],
+        (appimage for appimage in matches if is_amd64(appimage.name)),
+        matches[0],
     )
 
 
@@ -167,6 +184,7 @@ def parse_asset(raw: dict[str, Any]) -> Asset:
     raw_digest = raw.get("digest")  # e.g "sha256:abc123..."
     # get the digest only, not sha256
     digest = raw_digest.split(":", 1)[1] if raw_digest else None
+    logger.debug("Parsed asset: %s, digest: %s", name, digest)
     return Asset(
         name=name,
         download_url=raw["browser_download_url"],

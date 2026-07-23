@@ -18,13 +18,10 @@ from .download import download_and_verify
 from .models import (
     INFO_MESSAGES,
     WARNING_MESSAGES,
-    ErrorCode,
-    ErrorKind,
     InfoCode,
     PackageError,
     PackageWarning,
     SelectedAssets,
-    Stage,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,19 +91,14 @@ async def _install_async(url: str) -> None | PackageError:
         None if the installation is successful,
         PackageError if an error occurs.
     """
-    try:
-        logger.debug("Parsing GitHub URL: %s", url)
-        owner, repo = parse_github_url(url)
-    except ValueError:
-        return PackageError(
-            package=url,
-            kind=ErrorKind.VALIDATION,
-            code=ErrorCode.INVALID_URL,
-            stage=Stage.QUERY.value,
-            retryable=False,
-        )
+    logger.debug("Starting async install flow for URL: %s", url)
+    parse_result = parse_github_url(url)
+    if isinstance(parse_result, PackageError):
+        return parse_result
 
+    owner, repo = parse_result
     package = repo
+    logger.debug("Parsed GitHub URL: owner=%s, repo=%s", owner, repo)
 
     # NOTE: Using aiohttp.ClientSession to manage HTTP requests and responses
     # this allows for efficient handling of multiple requests and responses,
@@ -127,7 +119,8 @@ async def _install_async(url: str) -> None | PackageError:
             return selected_appimage
 
         selected = SelectedAssets(appimage=selected_appimage)
-
+        logger.debug("Selected AppImage: %s", selected.appimage.name)
+        logger.debug("Selected assets: %s", selected)
         result = await download_and_verify(
             session=session,
             package=package,
@@ -138,9 +131,7 @@ async def _install_async(url: str) -> None | PackageError:
             return result
 
         appimage_path, verification, warnings = result
-
         logger.debug("Downloaded: %s", appimage_path)
-        logger.debug("Verification: %s", verification.status.value)
 
         for warning in warnings:
             _print_package_warning(warning)
@@ -158,7 +149,9 @@ def install(url: str) -> None:
         None
     """
     logger.info("%s", INFO_MESSAGES[InfoCode.QUERYING_UPSTREAM_RELEASES])
-    logger.debug("Installing from URL: %s", url)
+    logger.debug("Starting install command for URL: %s", url)
     result = asyncio.run(_install_async(url))
     if isinstance(result, PackageError):
         _exit_with_error(result)
+
+    logger.debug("Install command completed successfully for URL: %s", url)

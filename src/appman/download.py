@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 
 import aiohttp
@@ -21,6 +22,8 @@ from .models import (
     WarningCode,
 )
 from .verify import verify_downloaded_appimage
+
+logger = logging.getLogger(__name__)
 
 
 async def _download_asset(
@@ -49,6 +52,7 @@ async def _download_asset(
     dest_path = dest_dir / asset.name
     timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=60)
 
+    logger.debug("Downloading asset: %s to %s", asset.download_url, dest_path)
     async with DOWNLOAD_SEMAPHORE:
         try:
             async with session.get(
@@ -64,14 +68,26 @@ async def _download_asset(
                     )
                 response.raise_for_status()
 
+                logger.debug(
+                    "Response status: %s, content length: %s",
+                    response.status,
+                    response.headers.get("Content-Length"),
+                )
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
+                logger.debug("Creating temporary file: %s", tmp_path)
                 with tmp_path.open("wb") as fh:
+                    logger.debug(
+                        "Downloading asset to temporary file: %s", tmp_path
+                    )
                     async for chunk in response.content.iter_chunked(
                         CHUNK_SIZE
                     ):
                         fh.write(chunk)
                     tmp_path.replace(dest_path)
+                    logger.debug(
+                        "Download complete, moved to final path: %s", dest_path
+                    )
         except aiohttp.ClientConnectorError:
             return PackageError(
                 package=package,
@@ -113,6 +129,11 @@ async def download_and_verify(
         PackageError: If the download or verification fails due to network,
                       HTTP, or checksum errors.
     """
+    logger.debug(
+        "Starting download and verification for package: %s, selected assets: %s",
+        package,
+        selected,
+    )
     tasks: list[asyncio.Task] = [
         asyncio.ensure_future(
             _download_asset(session, selected.appimage, dest_dir, package)
