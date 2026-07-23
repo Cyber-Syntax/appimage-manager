@@ -3,17 +3,21 @@
 Every dataclass here is the single source of truth referenced elsewhere
 (cli.py, config.py, install.py, update.py, api.py, file_ops.py). If you add
 a field, update the JSON state schema examples and config.py migration
-logic in the same PR (AGENTS.md §9).
+logic in the same PR.
 
 Nothing in this module raises. Business-outcome failures are represented
 as data (PackageError / PackageWarning), never exceptions, per AGENTS.md §6.
+
+| None → the value may be empty (None).
+= None → if you don't provide a value, Python uses None.
+NotRequired[...] → the dictionary key itself may be non exists.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -68,12 +72,11 @@ class Asset:
     download_url: str
     size: int
     asset_type: AssetType
-    digest: str | None
+    digest: str | None  # str, present and optional but nullable value
 
 
 # ---------------------------------------------------------------------------
-# Core domain dataclasses (ARCHITECTURE.md §6)
-# ---------------------------------------------------------------------------
+# Core domain dataclasses # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
@@ -96,9 +99,11 @@ class AppConfig:
     repo: str
     installed_version: str
     appimage_path: Path
-    desktop_file_path: Path | None = None
+    desktop_file_path: Path | None = (
+        None  # either Path or None and default is None
+    )
     icon_path: Path | None = None
-    skip_verify: bool = False
+    skip_verify: bool = False  # bool and default is False
     created_from_catalog: bool = True
     catalog_id: str | None = None
 
@@ -128,6 +133,44 @@ class CatalogEntry:
     allow_prerelease: bool = False
     allow_skip_verify: bool = False
     architecture: str = "x86_64"
+
+
+class GitHubAssetPayload(TypedDict):
+    """Raw shape of one asset object in the GitHub releases API JSON.
+
+    Arguments:
+        name: the name of the asset (e.g. "MyApp-x86_64.AppImage")
+        browser_download_url: the URL to download the asset
+        size: the size of the asset in bytes
+        content_type: the MIME type of the asset (e.g. "application/octet-stream")
+        digest: the SHA256 digest of the asset, if provided by GitHub
+                (e.g "sha256:abc123..." -> stored hex-only); None otherwise)
+    """
+
+    name: str
+    browser_download_url: str
+    size: int
+    content_type: NotRequired[str]  # Optional/missing key
+    digest: NotRequired[str | None]  # # Optional/missing key; might be null
+
+
+class GitHubReleasePayload(TypedDict):
+    """Raw shape of a GitHub release object in the GitHub releases API JSON.
+
+    Arguments:
+        tag_name: the Git tag name of the release (e.g. "v1.2.3")
+        name: the human-readable name of the release (e.g. "MyApp 1.2.3")
+        prerelease: whether the release is a prerelease
+        published_at: the ISO 8601 timestamp of when the release was published
+        assets: a list of asset objects associated with the release
+                (GithubAssetPayload)
+    """
+
+    tag_name: str
+    name: NotRequired[str]  # Optional/missing key
+    prerelease: bool
+    published_at: str
+    assets: list[GitHubAssetPayload]
 
 
 @dataclass(slots=True)

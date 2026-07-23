@@ -86,3 +86,6 @@ INCOMPATIBLE_PLATFORM_EXTENSIONS = (
     ".dmg",
     ".pkg",
 )
+
+# HTTP status codes
+HTTP_404 = 404

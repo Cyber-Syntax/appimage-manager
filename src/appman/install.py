@@ -7,12 +7,7 @@ import logging
 
 import aiohttp
 
-from .api import (
-    cache_release_data,
-    fetch_latest_release,
-    parse_github_url,
-    select_appimage_asset,
-)
+from .api import fetch_latest_release, parse_github_url, select_appimage_asset
 from .constants import APPIMAGES_DIR
 from .download import download_and_verify
 from .models import (
@@ -110,10 +105,7 @@ async def _install_async(url: str) -> None | PackageError:
         if isinstance(release, PackageError):
             return release
 
-        # TODO: use cache for later retry or same app version install
-        cache_release_data(owner, repo, release)
-
-        assets = release.get("assets", [])
+        assets = release.assets
         selected_appimage = select_appimage_asset(assets, package)
         if isinstance(selected_appimage, PackageError):
             return selected_appimage
@@ -130,7 +122,7 @@ async def _install_async(url: str) -> None | PackageError:
         if isinstance(result, PackageError):
             return result
 
-        appimage_path, verification, warnings = result
+        appimage_path, _, warnings = result
         logger.debug("Downloaded: %s", appimage_path)
 
         for warning in warnings:

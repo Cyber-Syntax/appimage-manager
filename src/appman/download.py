@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiohttp
 
-from .constants import CHUNK_SIZE, DOWNLOAD_SEMAPHORE
+from .constants import CHUNK_SIZE, DOWNLOAD_SEMAPHORE, HTTP_404
 from .models import (
     Asset,
     ChecksumResult,
@@ -23,7 +23,11 @@ from .models import (
 )
 from .verify import verify_downloaded_appimage
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 logger = logging.getLogger(__name__)
+
 
 
 async def _download_asset(
@@ -58,7 +62,7 @@ async def _download_asset(
             async with session.get(
                 asset.download_url, timeout=timeout
             ) as response:
-                if response.status == 404:
+                if response.status == HTTP_404:
                     return PackageError(
                         package=package,
                         kind=ErrorKind.ASSET,
@@ -83,8 +87,8 @@ async def _download_asset(
                     async for chunk in response.content.iter_chunked(
                         CHUNK_SIZE
                     ):
-                        fh.write(chunk)
-                    tmp_path.replace(dest_path)
+                        _ = fh.write(chunk)
+                    _ = tmp_path.replace(dest_path)
                     logger.debug(
                         "Download complete, moved to final path: %s", dest_path
                     )
@@ -108,14 +112,13 @@ async def _download_asset(
 
 
 # TODO: we might change checksum install seperate function?
-# FIXME: type errors
 async def download_and_verify(
     session: aiohttp.ClientSession,
     package: str,
     selected: SelectedAssets,
     dest_dir: Path,
 ) -> tuple[Path, ChecksumResult, list[PackageWarning]] | PackageError:
-    """Download the AppImage (+checksum_file if detected) concurrently then verify.
+    """Download AppImage (+checksum_file if detected) concurrently then verify.
 
     Args:
         session: The aiohttp client session to use for the download.
@@ -134,7 +137,7 @@ async def download_and_verify(
         package,
         selected,
     )
-    tasks: list[asyncio.Task] = [
+    tasks: list[asyncio.Task[DownloadedAsset | PackageError]] = [
         asyncio.ensure_future(
             _download_asset(session, selected.appimage, dest_dir, package)
         )

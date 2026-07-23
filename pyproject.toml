@@ -1,5 +1,5 @@
 [project]
-name = 'appimage-manager'
+name = 'appman'
 version = '0.1.0-alpha'
 license = { text = "GPL-3.0-or-later" }
 description = 'appimage-manager is a command-line tool to manage AppImages on Linux. It allows users to install, update, and manage AppImages from GitHub repositories easily. It is designed to simplify the process of handling AppImages, making it more convenient for users to keep their applications up-to-date.'
