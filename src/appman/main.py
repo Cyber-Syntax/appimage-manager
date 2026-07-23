@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 
-from .cli import parse_args
+from .cli import create_parser, parse_args
 from .config import init_config
 from .logger import init_log
 
@@ -18,11 +18,11 @@ def main() -> None:
     init_log()
     logger.debug("Starting appman...")
 
-    args = parse_args()
-    if args.command == "install":
-        from .install import install
-
-        install(args.url)
+    parser = create_parser()
+    args = parse_args(parser)
+    if hasattr(args, "func"):
+        args.func(args)
     else:
-        logger.error("Wrong command")
+        logger.error("No command provided. Help message provided:\n")
+        parser.print_help()
         sys.exit(1)
