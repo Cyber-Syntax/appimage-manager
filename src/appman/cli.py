@@ -8,7 +8,7 @@ from .install import install
 
 def install_cmd(args: argparse.Namespace) -> None:
     """Install command."""
-    install(args.url)
+    install(args.urls)
 
 
 def parse_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -44,13 +44,14 @@ def create_parser() -> argparse.ArgumentParser:
         description="Install AppImage from GitHub URL",
         epilog="""
 Example usage:
-    appman install https://github.com/pbek/QOwnNotes
+    appman install https://github.com/pbek/QOwnNotes https://github.com/super-productivity/super-productivity
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     _ = install_parser.add_argument(
-        "url",
-        help="GitHub release URL (e.g. https://github.com/owner/repo)",
+        "urls",
+        nargs="+",
+        help="GitHub release URLs (e.g. https://github.com/owner/repo)",
     )
 
     install_parser.set_defaults(func=install_cmd)

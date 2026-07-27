@@ -60,90 +60,130 @@ def _print_package_warning(warning: PackageWarning) -> None:
     )
 
 
-def _exit_with_error(error: PackageError) -> None:
-    """Print a package error and terminate the install flow.
-
-    Args:
-        error: The package error to print.
-
-    Raises:
-        SystemExit: Always raised to terminate the install flow.
-
-    Returns:
-        None
-    """
-    _print_package_error(error)
-    raise SystemExit(1)
-
-
-async def _install_async(url: str) -> None | PackageError:
+async def _install_one(
+    session: aiohttp.ClientSession, url: str
+) -> tuple[str, str | PackageError]:
     """Run the install flow for one GitHub repository URL.
 
     Args:
+        session: The aiohttp.ClientSession to use for HTTP requests.
         url: The GitHub repository URL to install from.
 
     Returns:
-        None if the installation is successful,
-        PackageError if an error occurs.
+        tuple: (package name, installed version string) on success.
+        tuple: (package name, PackageError) on failure.
     """
     logger.debug("Starting async install flow for URL: %s", url)
     parse_result = parse_github_url(url)
     if isinstance(parse_result, PackageError):
-        return parse_result
+        # no owner/repo yet, use the raw url as the reported "package"
+        return parse_result.package, parse_result
 
     owner, repo = parse_result
     package = repo
     logger.debug("Parsed GitHub URL: owner=%s, repo=%s", owner, repo)
 
-    # NOTE: Using aiohttp.ClientSession to manage HTTP requests and responses
-    # this allows for efficient handling of multiple requests and responses,
-    # as well as connection pooling and session management.
-    async with aiohttp.ClientSession(
-        headers={"Accept": "application/vnd.github+json"}
-    ) as session:
-        release = await fetch_latest_release(session, owner, repo, package)
-        if isinstance(release, PackageError):
-            return release
+    release = await fetch_latest_release(session, owner, repo, package)
+    if isinstance(release, PackageError):
+        return package, release
 
-        assets = release.assets
-        selected_appimage = select_appimage_asset(assets, package)
-        if isinstance(selected_appimage, PackageError):
-            return selected_appimage
+    selected_appimage = select_appimage_asset(release.assets, package)
+    if isinstance(selected_appimage, PackageError):
+        return package, selected_appimage
 
-        selected = SelectedAssets(appimage=selected_appimage)
-        logger.debug("Selected AppImage: %s", selected.appimage.name)
-        logger.debug("Selected assets: %s", selected)
-        result = await download_and_verify(
-            session=session,
-            package=package,
-            selected=selected,
-            dest_dir=APPIMAGES_DIR,
-        )
-        if isinstance(result, PackageError):
-            return result
+    selected = SelectedAssets(appimage=selected_appimage)
+    logger.debug(
+        "Selected AppImage asset: name=%s",
+        selected.appimage.name,
+    )
 
-        appimage_path, _, warnings = result
-        logger.debug("Downloaded: %s", appimage_path)
+    result = await download_and_verify(
+        session=session,
+        package=package,
+        selected=selected,
+        dest_dir=APPIMAGES_DIR,
+    )
+    if isinstance(result, PackageError):
+        return package, result
 
-        for warning in warnings:
-            _print_package_warning(warning)
+    appimage_path, _, warnings = result
+    logger.debug("Downloaded: %s", appimage_path)
 
-        return None  # success
+    for warning in warnings:
+        _print_package_warning(warning)
+
+    return package, release.tag_name  # success
 
 
-def install(url: str) -> None:
-    """Install an AppImage from a GitHub repository URL.
+async def _install_all_async(
+    urls: list[str],
+) -> list[tuple[str, str | PackageError]]:
+    """Run the install flow for multiple GitHub repository URLs concurrently.
+
+    A signle shared session is used for the whole batch and actual
+    concurrency is still bounded by API_SEMAPHORE and DOWNLOAD_SEMAPHORE,
+    both module-level, so this doesn't bypass those limits.
 
     Args:
-        url: The GitHub repository URL to install from.
+        urls: A list of GitHub repository URLs to install from.
+
+    Returns:
+        A list of tuples containing the package name and either the installed
+        version string or a PackageError for each URL.
+    """
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            asyncio.ensure_future(_install_one(session, url)) for url in urls
+        ]
+        return await asyncio.gather(*tasks)
+
+
+def install(urls: list[str]) -> None:
+    """Install one or more AppImages from GitHub repository URLs.
+
+    Valid targets are processed even if others fail.
+    Each failure is reported individually and a transaction summary
+    is printed regardless of success or failure.
+
+    Exit codes:
+        0: all targets installed successfully
+        1: partial or total failure (one or more targets failed)
+
+    Args:
+        urls: The GitHub repository URLs to install from.
 
     Returns:
         None
+
+    Raises:
+        SystemExit: Raised with exit code 0, 1, or 2.
     """
     logger.info("%s", INFO_MESSAGES[InfoCode.QUERYING_UPSTREAM_RELEASES])
-    logger.debug("Starting install command for URL: %s", url)
-    result = asyncio.run(_install_async(url))
-    if isinstance(result, PackageError):
-        _exit_with_error(result)
+    logger.debug("Starting install command for URL: %s", urls)
 
-    logger.debug("Install command completed successfully for URL: %s", url)
+    results = asyncio.run(_install_all_async(urls))
+
+    installed: list[tuple[str, str]] = []
+    failed: list[tuple[str, PackageError]] = []
+    for package, outcome in results:
+        if isinstance(outcome, PackageError):
+            failed.append((package, outcome))
+        else:
+            installed.append((package, outcome))
+
+    logger.info("%s", INFO_MESSAGES[InfoCode.CREATING_TRANSACTION_SUMMARY])
+    for name, version in installed:
+        logger.info("INSTALLED %s %s", name, version)
+    for name, _ in failed:
+        logger.error("FAILED %s", name)
+    logger.info("%s", INFO_MESSAGES[InfoCode.DONE])
+
+    logger.debug(
+        "Install command completed with %d successes and %d failures",
+        len(installed),
+        len(failed),
+    )
+
+    if failed:
+        raise SystemExit(1)  # partial or total failure
+    # all succeeded -> return None, exit 0
