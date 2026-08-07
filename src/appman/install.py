@@ -60,6 +60,11 @@ def _print_package_warning(warning: PackageWarning) -> None:
     )
 
 
+# NOTE: "async def" is used here because it's body contains "await" calls
+# that talk to the network (fetch_latest_release, download_and_verify).
+# Being async doesn't make this function run concurrently by itself
+# it just means this function is allowed to "pause and resume" at await points,
+# so other tasks can run while this one is waiting for network I/O to complete.
 async def _install_one(
     session: aiohttp.ClientSession, url: str
 ) -> tuple[str, str | PackageError]:
@@ -83,6 +88,10 @@ async def _install_one(
     package = repo
     logger.debug("Parsed GitHub URL: owner=%s, repo=%s", owner, repo)
 
+    # NOTE: "await" is used here because GitHub API over the network is involved,
+    # "await" means "pause this function until the response comes back.".
+    # while paused, the event loop is free to run other _install_one() tasks
+    # for other URLs in the same batch, so they can all run concurrently.
     release = await fetch_latest_release(session, owner, repo, package)
     if isinstance(release, PackageError):
         return package, release
@@ -97,6 +106,9 @@ async def _install_one(
         selected.appimage.name,
     )
 
+    # NOTE: downloads + verification for this one package. Internally this
+    # function does it's own concurrency (see download.py),
+    # but here mean "wait for this whole step to finish"
     result = await download_and_verify(
         session=session,
         package=package,
@@ -115,6 +127,9 @@ async def _install_one(
     return package, release.tag_name  # success
 
 
+# this func whole job is the launch many _install_one() tasks concurrently
+# and wait for them all to finish.
+# (e.g 2 urls install -> 2 _install_one() tasks running concurrently)
 async def _install_all_async(
     urls: list[str],
 ) -> list[tuple[str, str | PackageError]]:
@@ -131,10 +146,22 @@ async def _install_all_async(
         A list of tuples containing the package name and either the installed
         version string or a PackageError for each URL.
     """
+    # opens one shared aiohttp.ClientSession for the whole batch of URLs,
+    # so we don't have to open/close a new session for each URL.
+    # "with" guarantees the session is closed when this function exits,
+    # even if an exception occurs.
     async with aiohttp.ClientSession() as session:
+        # ensure_future(): this schedules each _install_one() coroutine
+        # to start running right away without waiting for it to finish.
+        # so this inside a loop is how you "fire off" many tasks at once
+        # instead of running them one after another.
         tasks = [
             asyncio.ensure_future(_install_one(session, url)) for url in urls
         ]
+        # asyncio.gather() is used to wait for all the tasks to finish together,
+        # not one at a time. While tasks 1 is waiting on the network, task 2
+        # can be making progress, and so on. gather returns the results
+        # in the same order the tasks were created, once everything is done.
         return await asyncio.gather(*tasks)
 
 
@@ -161,6 +188,11 @@ def install(urls: list[str]) -> None:
     logger.info("%s", INFO_MESSAGES[InfoCode.QUERYING_UPSTREAM_RELEASES])
     logger.debug("Starting install command for URL: %s", urls)
 
+    # asyncio.run() is the bridge between sync (argparse, cli.py, etc.) and the
+    # async (_install_all_async and everything it calls).
+    # this starts an event loop, runs the async function until it completely
+    # done, then shuts the loop down and hands back a plain value,
+    # so the rest of this func can stay totally normal, synchronous.
     results = asyncio.run(_install_all_async(urls))
 
     installed: list[tuple[str, str]] = []

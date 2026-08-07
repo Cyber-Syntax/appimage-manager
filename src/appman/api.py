@@ -81,8 +81,13 @@ async def fetch_latest_release(
     logger.debug("Fetching latest release for %s/%s", owner, repo)
     url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
 
+    # Use a semaphore to limit concurrent API requests because of rate limits.
     async with API_SEMAPHORE:
         try:
+            # NOTE: session.get() doesn't fetch anything by itself
+            # enterin "async with" is what actually send the request
+            # and pauses this task until the response HEADERS come back.
+            # Other tasks run while we wait here.
             async with session.get(
                 url, timeout=aiohttp.ClientTimeout(total=15)
             ) as response:
@@ -96,9 +101,14 @@ async def fetch_latest_release(
                         retryable=True,
                     )
                 response.raise_for_status()
-                # aiohttp.json is typed Any - this is the one deliberate
+                # NOTE: aiohttp.json is typed Any - this is the one deliberate
                 # boundry crossing. Parse into GitHubRelease immediately
                 # so Any never escapes this function.
+                #
+                # NOTE: headers arrived above, but the response body still
+                # needs to be downloaded and parsed as JSON. That's a second,
+                # seperate wait. "await response.json()" pauses this task
+                # again until the whole body has arrived and been parsed.
                 raw = cast("GitHubReleasePayload", await response.json())
                 logger.debug("Raw release data: %s", raw)
                 cache_release_data(owner, repo, raw)

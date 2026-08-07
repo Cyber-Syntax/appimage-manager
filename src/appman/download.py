@@ -29,7 +29,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-
 async def _download_asset(
     session: aiohttp.ClientSession,
     asset: Asset,
@@ -57,8 +56,14 @@ async def _download_asset(
     timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=60)
 
     logger.debug("Downloading asset: %s to %s", asset.download_url, dest_path)
+
+    # Use a semaphore to limit concurrent downloads
     async with DOWNLOAD_SEMAPHORE:
         try:
+            # same patterns as api.py: session.get() doesn't fetch anything by
+            # itself. entering this sends the GET request and pauses until
+            # response headers arrive. Other tasks(other downloads, installs)
+            # run while we wait here.
             async with session.get(
                 asset.download_url, timeout=timeout
             ) as response:
@@ -84,10 +89,18 @@ async def _download_asset(
                     logger.debug(
                         "Downloading asset to temporary file: %s", tmp_path
                     )
+                    # this is an "async generator" loop. Instead of
+                    # await response.read() (which waits for the whole file
+                    # to be downloaded), this hands you 256kB chunks as they
+                    # arrives over the network, pausing this task between chunks.
+                    # That's why an AppImage never has to sit fully in memory,
+                    # each chunk is written to disk and then thrown away.
                     async for chunk in response.content.iter_chunked(
                         CHUNK_SIZE
                     ):
+                        # writing to a local file is fast so using synchronous
                         _ = fh.write(chunk)
+                    # rename the temporary file to the final destination path
                     _ = tmp_path.replace(dest_path)
                     logger.debug(
                         "Download complete, moved to final path: %s", dest_path
@@ -137,12 +150,19 @@ async def download_and_verify(
         package,
         selected,
     )
+    # ensure_future() is schedules the AppImage download to start now,
+    # without blocking to wait for it. It goes into a plain list of tasks,
+    # same idea as install.py's, just smaller scale.
     tasks: list[asyncio.Task[DownloadedAsset | PackageError]] = [
         asyncio.ensure_future(
             _download_asset(session, selected.appimage, dest_dir, package)
         )
     ]
     if selected.checksum_file is not None:
+        # ensure_future() is schedules the checksum download to start now if
+        # it exists. Both were ensure_future before any await/gather, so they
+        # start running concurrently. The appimage and it's checksum file
+        # download at the same time instead of one after the other.
         tasks.append(
             asyncio.ensure_future(
                 _download_asset(
@@ -151,6 +171,9 @@ async def download_and_verify(
             )
         )
 
+    # await + gather waits for both downloads (or the single if no checksum)
+    # to finish, and returns a list of results in the same order as the tasks
+    # were added.
     results = await asyncio.gather(*tasks)
 
     appimage_result = results[0]
@@ -175,6 +198,7 @@ async def download_and_verify(
         else:
             checksum_path = checksum_result.path
 
+    # verify the downloaded AppImage using the checksum file if it exists
     verification, verify_warnings = verify_downloaded_appimage(
         appimage_path, selected.appimage, checksum_path
     )
