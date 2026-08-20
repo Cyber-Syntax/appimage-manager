@@ -16,7 +16,6 @@ from .models import (
     InfoCode,
     PackageError,
     PackageWarning,
-    SelectedAssets,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,11 +95,13 @@ async def _install_one(
     if isinstance(release, PackageError):
         return package, release
 
-    selected_appimage = select_appimage_asset(release.assets, package)
-    if isinstance(selected_appimage, PackageError):
-        return package, selected_appimage
+    # select_appimage_asset now returns SelectedAssets directly
+    # it resolves both the appimage and its matching checksum/digest file
+    # in one pass, so no manual SelectedAssets() wrap here anymore
+    selected = select_appimage_asset(release.assets, package)
+    if isinstance(selected, PackageError):
+        return package, selected
 
-    selected = SelectedAssets(appimage=selected_appimage)
     logger.debug(
         "Selected AppImage asset: name=%s",
         selected.appimage.name,

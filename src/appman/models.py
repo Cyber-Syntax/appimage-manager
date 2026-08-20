@@ -52,6 +52,7 @@ class AssetType(Enum):
 
     APPIMAGE = "AppImage"
     CHECKSUM_FILE = "checksum_file"
+    OTHER_TYPE = "other_type"
 
 
 @dataclass(frozen=True, slots=True)

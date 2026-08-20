@@ -25,12 +25,63 @@ from .models import (
     GitHubReleasePayload,
     PackageError,
     ReleaseAsset,
+    SelectedAssets,
     Stage,
 )
 
 logger = logging.getLogger(__name__)
 
+_CHECKSUM_EXTENSIONS = (
+    ".sha256sum",
+    ".sha256",
+    ".sha512sum",
+    ".sha512",
+    ".digest",
+    ".yml",
+    ".yaml",
+)
 
+_CHECKSUM_EXACT_NAMES = frozenset(
+    {
+        "sha256sums",
+        "sha256sums.txt",
+        "sha512sums",
+        "sha512sums.txt",
+        "checksums",
+        "checksums.txt",
+    }
+)
+
+# Release-wide manifests that verify every asset in the release rather than
+# one specific file (e.g. electron-builder's latest-linux.yml, or a single
+# SHA256SUMS covering all binaries). Used as a fallback when no per-file
+# checksum matches the selected AppImage by name.
+_RELEASE_WIDE_CHECKSUM_NAMES = frozenset(
+    {
+        "sha256sums",
+        "sha256sums.txt",
+        "sha512sums",
+        "sha512sums.txt",
+        "checksums",
+        "checksums.txt",
+        "latest-linux.yml",
+        "latest.yml",
+    }
+)
+
+# INCOMPATIBLE_PLATFORM_EXTENSIONS (.msi/.exe/.dmg/.pkg) can appear anywhere
+# in a filename, not just as the true suffix — e.g. "app-x86_64.dmg.DIGEST"
+# ends in ".DIGEST", not ".dmg". Match the extension embedded anywhere,
+# bounded by a separator or end-of-string, so it still doesn't false-positive
+# on something like "app-dmgsomething.AppImage".
+_EMBEDDED_INCOMPATIBLE_EXT_RE = re.compile(
+    r"(?:{})(?:[._-]|$)".format(
+        "|".join(re.escape(ext) for ext in INCOMPATIBLE_PLATFORM_EXTENSIONS)
+    )
+)
+
+
+# TODO: make it case-insensitive
 def parse_github_url(url: str) -> tuple[str, str] | PackageError:
     """Extract the repository owner and name from a GitHub URL.
 
@@ -60,6 +111,7 @@ def parse_github_url(url: str) -> tuple[str, str] | PackageError:
     return match.group("owner"), match.group("repo")
 
 
+# TODO: add expection for malformed JSON body
 async def fetch_latest_release(
     session: aiohttp.ClientSession,
     owner: str,
@@ -195,29 +247,57 @@ def cache_release_data(
 
 def select_appimage_asset(
     assets: list[ReleaseAsset], package: str
-) -> Asset | PackageError:
-    """Find the best AppImage asset from a GitHub release's raw asset list.
+) -> SelectedAssets | PackageError:
+    """Select the best AppImage asset and its matching checksum/digest file.
 
-    Args:
+    Per ARCHITECTURE.md §8 ("retain associated checksum asset if present"),
+    this now resolves both halves of verification in one pass instead of
+    discarding checksum assets: the AppImage is chosen first (platform
+    filter → stable-over-beta, unless every candidate is unstable, e.g.
+    FreeTube → prefer amd64/x86_64), then a matching checksum file is
+    resolved against that specific AppImage.
+
+    Arguments:
         assets: The list of raw asset dictionaries from the GitHub API.
         package: The package name for error reporting.
 
     Returns:
-        Asset: The best AppImage asset.
+        SelectedAssets: The best AppImage asset, with its checksum file
+            if one was found (None is a normal, expected outcome, not
+            an error — many upstreams simply don't ship one).
         PackageError: If no suitable AppImage is found.
     """
     logger.debug("Selecting AppImage asset from %d assets", len(assets))
     parsed = [parse_asset(raw) for raw in assets]
-    appimages = [
-        appimage
-        for appimage in parsed
-        if appimage.asset_type == AssetType.APPIMAGE
-    ]
-    matches = [
-        appimage
-        for appimage in appimages
-        if not is_incompatible_platform(appimage.name)
-    ]
+
+    appimage = _select_best_appimage(parsed, package)
+    if isinstance(appimage, PackageError):
+        return appimage
+
+    checksum_file = _select_matching_checksum_file(parsed, appimage)
+    logger.debug(
+        "Selected AppImage: %s, checksum file: %s",
+        appimage.name,
+        checksum_file.name if checksum_file else None,
+    )
+    return SelectedAssets(appimage=appimage, checksum_file=checksum_file)
+
+
+def _select_best_appimage(
+    parsed: list[Asset], package: str
+) -> Asset | PackageError:
+    """Run the appimage-only selection pipeline (platform -> stability -> arch.
+
+    Arguments:
+        parsed: The full list of classified assets from the release.
+        package: The package name for error reporting.
+
+    Returns:
+        Asset: The best-matching AppImage asset.
+        PackageError: If no suitable AppImage is found.
+    """
+    appimages = [a for a in parsed if a.asset_type == AssetType.APPIMAGE]
+    matches = [a for a in appimages if not is_incompatible_platform(a.name)]
     logger.debug("Found %d match AppImage assets", len(matches))
 
     if not matches:
@@ -229,17 +309,70 @@ def select_appimage_asset(
             retryable=True,
         )
 
-    stable = [
-        appimage for appimage in matches if not is_unstable(appimage.name)
-    ]
-    # keep all-beta apps to support freetube and similar always beta apps
+    stable = [a for a in matches if not is_unstable(a.name)]
+    # keep all beta apps to support freetube and similar always beta apps
     matches = stable or matches
-
     logger.debug("Final match AppImage assets: %d", len(matches))
 
     return next(
-        (appimage for appimage in matches if is_amd64(appimage.name)),
+        (a for a in matches if is_amd64(a.name)),
         matches[0],
+    )
+
+
+def _select_matching_checksum_file(
+    parsed: list[Asset], appimage: Asset
+) -> Asset | None:
+    """Find the checksum/digest asset that verifies the selected AppImage.
+
+    Real-world checksum files come in two shapes:
+      1. Per-file: named after the AppImage itself, e.g.
+         "QOwnNotes-x86_64.AppImage.sha256sum" for
+         "QOwnNotes-x86_64.AppImage" — matched by prefix.
+      2. Release-wide manifests covering every asset in the release, e.g.
+         "SHA256SUMS" or "latest-linux.yml" — used only as a fallback
+         when no per-file match exists.
+    Platform-incompatible checksum files (e.g. a stray macOS/Windows
+    counterpart) are filtered out the same way AppImages are, so a
+    "KeePassXC-2.7.10-x86_64.dmg.DIGEST" is never mistaken for a match
+    despite containing "x86_64".
+
+    Arguments:
+        parsed: The full list of classified assets from the release.
+        appimage: The AppImage asset already selected.
+
+    Returns:
+        The matching checksum Asset, or None if the release has no
+        usable checksum/digest file — a normal, expected outcome.
+    """
+    candidates = [
+        a
+        for a in parsed
+        if a.asset_type == AssetType.CHECKSUM_FILE
+        and not is_incompatible_platform(a.name)
+    ]
+    # TODO: might be need to return PackageError?
+    if not candidates:
+        return None
+
+    per_file = next(
+        (
+            c
+            for c in candidates
+            if c.name.lower().startswith(appimage.name.lower())
+        ),
+        None,
+    )
+    if per_file is not None:
+        return per_file
+
+    return next(
+        (
+            c
+            for c in candidates
+            if c.name.lower() in _RELEASE_WIDE_CHECKSUM_NAMES
+        ),
+        None,
     )
 
 
@@ -265,20 +398,34 @@ def parse_asset(raw: ReleaseAsset) -> Asset:
 def classify_asset_type(name: str) -> AssetType:
     """Classify a filename as AppImage, checksum file, or digest.
 
+    Checksum files are recognized by known extensions (.sha256sum,
+    .DIGEST, .yml, ...) or exact release-wide manifest names
+    (SHA256SUMS, SHA256SUMS.txt, ...)
+
     Arguments:
         name: The name of the filename to classify.
 
     Returns:
-        The type of the asset.
+        The type of the asset:
+            APPIMAGE
+            CHECKSUM_FILE
+            OTHER_TYPE
     """
     lower = name.lower()
     if lower.endswith(".appimage"):
         return AssetType.APPIMAGE
-    return AssetType.CHECKSUM_FILE
+    if lower.endswith(_CHECKSUM_EXTENSIONS) or lower in _CHECKSUM_EXACT_NAMES:
+        return AssetType.CHECKSUM_FILE
+    return AssetType.OTHER_TYPE
 
 
 def is_incompatible_platform(name: str) -> bool:
     """Check if the asset name indicates an incompatible platform.
+
+    Checks both true-suffix extensions (app.dmg) and extensions embedded
+    earlier in a compound filename (app-x86_64.dmg.DIGEST — a macOS
+    checksum file whose *true* suffix is .DIGEST), then falls back to the
+    existing win/mac/arm keyword patterns.
 
     Arguments:
         name: The name of the asset.
@@ -288,7 +435,7 @@ def is_incompatible_platform(name: str) -> bool:
         False otherwise.
     """
     lower = name.lower()
-    if lower.endswith(INCOMPATIBLE_PLATFORM_EXTENSIONS):
+    if _EMBEDDED_INCOMPATIBLE_EXT_RE.search(lower):
         return True
     return any(
         re.search(pattern, lower) for pattern in INCOMPATIBLE_PLATFORM_PATTERNS
