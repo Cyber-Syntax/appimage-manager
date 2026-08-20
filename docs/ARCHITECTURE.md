@@ -7,13 +7,19 @@
 ## 2. Module Layout
 
 ```
-mycli/
+appman/
   cli.py        # argument parsing, dispatch
   config.py     # global + per-app config load/save/migrate
+  constants.py  # constants
+  download.py   # download and verify appimage
   install.py    # install orchestration
+  logger.py     # logging init
   update.py     # update orchestration
   api.py        # GitHub REST client
-  file_ops.py   # download, extract, desktop entry, icon
+  file_ops.py   # make executable...
+  models.py     # all the dataclasses, enums...
+  verify.py     # verify appimage internal logic
+
 ```
 
 ## 3. Storage Layout (XDG-aligned)

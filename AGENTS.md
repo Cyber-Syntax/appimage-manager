@@ -215,7 +215,7 @@ or an appman limitation."
 y → status=SKIPPED, warn (code: NO_CHECKSUM_SKIPPED or
 NO_CHECKSUM_UNSUPPORTED depending on source), remember decision as
 skip_verify=true in the per-app state JSON, THEN proceed to install
-(chmod +x, move to ~/Applications, create desktop entry, extract icon).
+(chmod +x, move to ~/.local/share/appman/appimages/, create desktop entry, extract icon).
 n → abort: delete the downloaded AppImage only. Nothing else was created.
 
 ```
@@ -231,7 +231,7 @@ sequence is always:
 download AppImage
 → attempt verification (§8.2)
 → resolve outcome: VERIFIED | user accepted FAILED | user accepted SKIPPED
-→ only then: chmod +x → move into ~/Applications → create .desktop → extract icon → write state JSON
+→ only then: chmod +x → move into ~/.local/share/appman/appimages/ → create .desktop → extract icon → write state JSON
 ```
 
 So an abort at any verification prompt is always a clean, single-file
