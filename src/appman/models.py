@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
 # TODO: refactor google style docstrings
 
+
 # ---------------------------------------------------------------------------
 # Asset classification
 # ---------------------------------------------------------------------------
@@ -391,6 +392,7 @@ class ErrorCode(Enum):
     CHECKSUM_MISMATCH = "checksum_mismatch"
     PERMISSION_DENIED = "permission_denied"
     INVALID_URL = "invalid_url"
+    MALFORMED_RESPONSE = "malformed_response"
     UNKNOWN_ERROR = "unknown_error"
 
 
@@ -429,6 +431,7 @@ ERROR_MESSAGES: dict[ErrorCode, str] = {
         "invalid or unsupported repository URL: expected GitHub URL. "
         "Example: https://github.com/pbek/QOwnNotes"
     ),
+    ErrorCode.MALFORMED_RESPONSE: "Malformed release payload",
     ErrorCode.UNKNOWN_ERROR: "an unknown error occurred",
 }
 
@@ -454,11 +457,13 @@ class WarningCode(Enum):
         CHECKSUM_FILE_CORRUPT: checksum file could not be parsed,
                                likely an upstream build-tooling issue,
                                not a verification failure
+        UNKNOWN_WARNING: an unknown warning occurred
     """
 
     NO_CHECKSUM_SKIPPED = "no_checksum_skipped"
     NO_CHECKSUM_UNSUPPORTED = "no_checksum_unsupported"
     CHECKSUM_FILE_CORRUPT = "checksum_file_corrupt"
+    UNKNOWN_WARNING = "unknown_warning"
 
 
 @dataclass(slots=True)
@@ -489,6 +494,7 @@ WARNING_MESSAGES: dict[WarningCode, str] = {
         "checksum file could not be parsed : this is likely an upstream "
         "build-tooling issue, not a verification failure"
     ),
+    WarningCode.UNKNOWN_WARNING: "an unknown warning occurred",
 }
 
 

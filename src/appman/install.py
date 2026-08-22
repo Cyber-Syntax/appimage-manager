@@ -11,14 +11,23 @@ from .api import fetch_latest_release, parse_github_url, select_appimage_asset
 from .constants import APPIMAGES_DIR
 from .download import download_and_verify
 from .models import (
+    ERROR_MESSAGES,
     INFO_MESSAGES,
     WARNING_MESSAGES,
+    ErrorCode,
+    ErrorKind,
     InfoCode,
     PackageError,
     PackageWarning,
+    Stage,
+    WarningCode,
 )
 
 logger = logging.getLogger(__name__)
+
+# fallbacks for codes that somehow aren't in the message dicts
+_UNKOWN_ERROR_MESSAGE = ERROR_MESSAGES[ErrorCode.UNKNOWN_ERROR]
+_UNKOWN_WARNING_MESSAGE = WARNING_MESSAGES[WarningCode.UNKNOWN_WARNING]
 
 
 def _print_package_error(error: PackageError) -> None:
@@ -30,13 +39,15 @@ def _print_package_error(error: PackageError) -> None:
     Returns:
         None
     """
+    message = ERROR_MESSAGES.get(error.code, _UNKOWN_ERROR_MESSAGE)
     logger.error(
-        "%s: %s/%s at %s (retryable=%s)",
+        "%s: %s/%s at %s (retryable=%s) - %s",
         error.package,
         error.kind.value,
         error.code.value,
         error.stage,
         error.retryable,
+        message,
     )
 
 
@@ -49,7 +60,7 @@ def _print_package_warning(warning: PackageWarning) -> None:
     Returns:
         None
     """
-    message = WARNING_MESSAGES.get(warning.code, warning.code.value)
+    message = WARNING_MESSAGES.get(warning.code, _UNKOWN_WARNING_MESSAGE)
     logger.warning(
         "%s: %s at %s - %s",
         warning.package,
@@ -78,54 +89,72 @@ async def _install_one(
         tuple: (package name, PackageError) on failure.
     """
     logger.debug("Starting async install flow for URL: %s", url)
-    parse_result = parse_github_url(url)
-    if isinstance(parse_result, PackageError):
-        # no owner/repo yet, use the raw url as the reported "package"
-        return parse_result.package, parse_result
+    # fallback label until/unless parse_github_url resolves a repo name
+    package = url
+    try:
+        parse_result = parse_github_url(url)
+        if isinstance(parse_result, PackageError):
+            # no owner/repo yet, use the raw url as the reported "package"
+            return parse_result.package, parse_result
 
-    owner, repo = parse_result
-    package = repo
-    logger.debug("Parsed GitHub URL: owner=%s, repo=%s", owner, repo)
+        owner, repo = parse_result
+        package = repo
+        logger.debug("Parsed GitHub URL: owner=%s, repo=%s", owner, repo)
 
-    # NOTE: "await" is used here because GitHub API over the network is involved,
-    # "await" means "pause this function until the response comes back.".
-    # while paused, the event loop is free to run other _install_one() tasks
-    # for other URLs in the same batch, so they can all run concurrently.
-    release = await fetch_latest_release(session, owner, repo, package)
-    if isinstance(release, PackageError):
-        return package, release
+        # NOTE: "await" is used here because GitHub API over the network is involved,
+        # "await" means "pause this function until the response comes back.".
+        # while paused, the event loop is free to run other _install_one() tasks
+        # for other URLs in the same batch, so they can all run concurrently.
+        release = await fetch_latest_release(session, owner, repo, package)
+        if isinstance(release, PackageError):
+            return package, release
 
-    # select_appimage_asset now returns SelectedAssets directly
-    # it resolves both the appimage and its matching checksum/digest file
-    # in one pass, so no manual SelectedAssets() wrap here anymore
-    selected = select_appimage_asset(release.assets, package)
-    if isinstance(selected, PackageError):
-        return package, selected
+        # select_appimage_asset now returns SelectedAssets directly
+        # it resolves both the appimage and its matching checksum/digest file
+        # in one pass, so no manual SelectedAssets() wrap here anymore
+        selected = select_appimage_asset(release.assets, package)
+        if isinstance(selected, PackageError):
+            return package, selected
 
-    logger.debug(
-        "Selected AppImage asset: name=%s",
-        selected.appimage.name,
-    )
+        logger.debug(
+            "Selected AppImage asset: name=%s",
+            selected.appimage.name,
+        )
 
-    # NOTE: downloads + verification for this one package. Internally this
-    # function does it's own concurrency (see download.py),
-    # but here mean "wait for this whole step to finish"
-    result = await download_and_verify(
-        session=session,
-        package=package,
-        selected=selected,
-        dest_dir=APPIMAGES_DIR,
-    )
-    if isinstance(result, PackageError):
-        return package, result
+        # NOTE: downloads + verification for this one package. Internally this
+        # function does it's own concurrency (see download.py),
+        # but here mean "wait for this whole step to finish"
+        result = await download_and_verify(
+            session=session,
+            package=package,
+            selected=selected,
+            dest_dir=APPIMAGES_DIR,
+        )
+        if isinstance(result, PackageError):
+            return package, result
 
-    appimage_path, _, warnings = result
-    logger.debug("Downloaded: %s", appimage_path)
+        appimage_path, _, warnings = result
+        logger.debug("Downloaded: %s", appimage_path)
 
-    for warning in warnings:
-        _print_package_warning(warning)
+        for warning in warnings:
+            _print_package_warning(warning)
 
-    return package, release.tag_name  # success
+    except Exception:
+        # last-resort boundary guard — an unexpected exception (e.g. a
+        # malformed API payload raising KeyError during parsing) must not
+        # propagate through gather() and cancel sibling in-flight installs.
+        # `package` is the best label available at this point: the repo
+        # name if parsing already succeeded, otherwise the raw URL.
+        logger.exception("Unexpected error installing %s", package)
+        return package, PackageError(
+            package=package,
+            kind=ErrorKind.INTERNAL,
+            code=ErrorCode.UNKNOWN_ERROR,
+            stage=Stage.QUERY.value,
+            retryable=False,
+        )
+    else:
+        return package, release.tag_name  # success
 
 
 # this func whole job is the launch many _install_one() tasks concurrently
@@ -163,6 +192,8 @@ async def _install_all_async(
         # not one at a time. While tasks 1 is waiting on the network, task 2
         # can be making progress, and so on. gather returns the results
         # in the same order the tasks were created, once everything is done.
+        # also gather is safe for errors on _install_one because that func
+        # never raises.
         return await asyncio.gather(*tasks)
 
 
@@ -217,6 +248,7 @@ def install(urls: list[str]) -> None:
         len(failed),
     )
 
+    # this would only reached after asyncio.run() has already returned
     if failed:
         raise SystemExit(1)  # partial or total failure
     # all succeeded -> return None, exit 0

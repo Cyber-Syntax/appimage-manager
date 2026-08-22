@@ -164,7 +164,22 @@ async def fetch_latest_release(
                 raw = cast("GitHubReleasePayload", await response.json())
                 logger.debug("Raw release data: %s", raw)
                 cache_release_data(owner, repo, raw)
-                return _parse_release_data(raw)
+                try:
+                    return _parse_release_data(raw)
+                except (KeyError, TypeError) as exc:
+                    logger.warning(
+                        "Malformed release payload for %s/%s: %s",
+                        owner,
+                        repo,
+                        exc,
+                    )
+                    return PackageError(
+                        package=package,
+                        kind=ErrorKind.ASSET,
+                        code=ErrorCode.MALFORMED_RESPONSE,
+                        stage=Stage.QUERY.value,
+                        retryable=False,
+                    )
         except aiohttp.ClientConnectorError:
             return PackageError(
                 package=package,
