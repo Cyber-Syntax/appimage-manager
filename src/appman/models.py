@@ -463,6 +463,7 @@ class WarningCode(Enum):
     NO_CHECKSUM_SKIPPED = "no_checksum_skipped"
     NO_CHECKSUM_UNSUPPORTED = "no_checksum_unsupported"
     CHECKSUM_FILE_CORRUPT = "checksum_file_corrupt"
+    DUPLICATE_TARGET_SKIPPED = "duplicate_target_skipped"
     UNKNOWN_WARNING = "unknown_warning"
 
 
@@ -493,6 +494,10 @@ WARNING_MESSAGES: dict[WarningCode, str] = {
     WarningCode.CHECKSUM_FILE_CORRUPT: (
         "checksum file could not be parsed : this is likely an upstream "
         "build-tooling issue, not a verification failure"
+    ),
+    WarningCode.DUPLICATE_TARGET_SKIPPED: (
+        "duplicate install target skipped : same repository was already "
+        "queued in this transaction"
     ),
     WarningCode.UNKNOWN_WARNING: "an unknown warning occurred",
 }

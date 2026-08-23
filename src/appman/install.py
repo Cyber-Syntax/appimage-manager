@@ -70,6 +70,64 @@ def _print_package_warning(warning: PackageWarning) -> None:
     )
 
 
+def _dedupe_urls(urls: list[str]) -> tuple[list[str], list[PackageWarning]]:
+    """Drop duplicate install targets, keeping first occurrence.
+
+    Dedup key is the parsed (owner, repo) pair, case-folded, so
+    'https://github.com/pbek/QOwnNotes' and the same URL with a
+    trailing '.git' collapse to one target instead of racing two
+    concurrent downloads into the same dest_path (see download.py).
+    URLs that fail to parse are kept as-is (deduped by raw string only)
+    so they still surface their own INVALID_URL PackageError downstream.
+
+    Args:
+        urls: The raw list of install targets from argparse.
+
+    Returns:
+        A tuple of (deduplicated urls, warnings for each duplicate dropped).
+    """
+    # python built-in set() store unique values only
+    seen: set[tuple[str, str] | str] = set()
+    # stores the unique URLs we want to keep
+    deduped: list[str] = []
+    # stores warnings about duplicates we skipped
+    warnings: list[PackageWarning] = []
+
+    for url in urls:
+        parsed = parse_github_url(url)
+        key: tuple[str, str] | str  # (owner, repo) or str
+
+        # check whether parsing failed
+        if isinstance(parsed, PackageError):
+            key = url
+        else:
+            owner, repo = parsed
+            key = (owner.casefold(), repo.casefold())
+
+        # check for any duplicated in seen set and skip if duplicated
+        if key in seen:
+            # label is repo name(key[1]) to show in warning if tuple, else url
+            label = key[1] if isinstance(key, tuple) else url
+            logger.debug("Dropping duplicate install target: %s", url)
+            warnings.append(
+                PackageWarning(
+                    package=label,
+                    code=WarningCode.DUPLICATE_TARGET_SKIPPED,
+                    stage=Stage.QUERY.value,
+                )
+            )
+            # stop processing this duplicated URL right now,
+            # go to next URL in the for loop
+            continue
+
+        # add unique key to seen set
+        seen.add(key)
+        # add unique url to deduped
+        deduped.append(url)
+
+    return deduped, warnings
+
+
 # NOTE: "async def" is used here because it's body contains "await" calls
 # that talk to the network (fetch_latest_release, download_and_verify).
 # Being async doesn't make this function run concurrently by itself
@@ -220,12 +278,16 @@ def install(urls: list[str]) -> None:
     logger.info("%s", INFO_MESSAGES[InfoCode.QUERYING_UPSTREAM_RELEASES])
     logger.debug("Starting install command for URL: %s", urls)
 
+    deduped_urls, dedupe_warnings = _dedupe_urls(urls)
+    for warning in dedupe_warnings:
+        _print_package_warning(warning)
+
     # asyncio.run() is the bridge between sync (argparse, cli.py, etc.) and the
     # async (_install_all_async and everything it calls).
     # this starts an event loop, runs the async function until it completely
     # done, then shuts the loop down and hands back a plain value,
     # so the rest of this func can stay totally normal, synchronous.
-    results = asyncio.run(_install_all_async(urls))
+    results = asyncio.run(_install_all_async(deduped_urls))
 
     installed: list[tuple[str, str]] = []
     failed: list[tuple[str, PackageError]] = []
