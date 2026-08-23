@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from appman.install import (
+    _dedupe_urls,
     _install_all_async,
     _install_one,
     _print_package_error,
@@ -664,3 +665,236 @@ def test_install_partitions_successes_and_failures_correctly(
             assert exc_info.value.code == 1
         else:
             assert install(["https://github.com/pbek/QOwnNotes"]) is None
+
+
+def test_install_prints_a_warning_for_each_dedupe_warning() -> None:
+    """The dedupe_warnings loop in install() must call _print_package_warning
+    once per warning returned by _dedupe_urls, in order -- this is the only
+    call site in instal() that consumes _dedupe_urls's warning list.
+    """
+    dup_warning_1 = PackageWarning(
+        package="qownnotes",
+        code=WarningCode.DUPLICATE_TARGET_SKIPPED,
+        stage=Stage.QUERY.value,
+    )
+    dup_warning_2 = PackageWarning(
+        package="appflowy",
+        code=WarningCode.DUPLICATE_TARGET_SKIPPED,
+        stage=Stage.QUERY.value,
+    )
+    deduped_urls = ["https://github.com/pbek/QOwnNotes"]
+
+    with (
+        patch(
+            "appman.install._dedupe_urls",
+            return_value=(deduped_urls, [dup_warning_1, dup_warning_2]),
+        ),
+        patch(
+            "appman.install.asyncio.run",
+            return_value=[("QOwnNotes", "v1.0.0")],
+        ),
+        patch("appman.install._print_package_warning") as mock_print_warn,
+    ):
+        outcome = install(
+            [
+                "https://github.com/pbek/QOwnNotes",
+                "https://github.com/pbek/qownnotes",
+                "https://github.com/AppFlowy-IO/AppFlowy",
+            ]
+        )
+
+        assert outcome is None  # single successful result -> no SystemExit
+        assert mock_print_warn.call_count == 2
+        mock_print_warn.assert_any_call(dup_warning_1)
+        mock_print_warn.assert_any_call(dup_warning_2)
+
+
+def test_install_prints_nothing_when_no_dedupe_warnings() -> None:
+    """Guards the empty-list branch of the same loop: when _dedupe_urls
+    returns no warnings, _print_package_warning must not be called for
+    dedup at all (it may still be called later for download warnings,
+    but not from this loop with an empty list).
+    """
+    with (
+        patch(
+            "appman.install._dedupe_urls",
+            return_value=(["https://github.com/pbek/QOwnNotes"], []),
+        ),
+        patch(
+            "appman.install.asyncio.run",
+            return_value=[("QOwnNotes", "v1.0.0")],
+        ),
+        patch("appman.install._print_package_warning") as mock_print_warn,
+    ):
+        install(["https://github.com/pbek/QOwnNotes"])
+
+    mock_print_warn.assert_not_called()
+
+
+# _dedupe_urls
+
+
+class TestDedupeUrls:
+    """Unit tests for install._dedupe_urls.
+
+    Covers the dedup-key logic itself: case-insensitive (owner, repo)
+    folding for parseable URLs, raw-string fallback for URLs that fail
+    to parse, and the warning label chosen for each branch. Uses the
+    real parse_github_url (pure function, already covered elsewhere)
+    rather than mocking it, since mocking it would hide the exact
+    behavior under test.
+    """
+
+    def test_no_duplicates_returns_all_urls_unchanged(self) -> None:
+        """Distinct repos produce no warnings and preserve input order."""
+        urls = [
+            "https://github.com/pbek/QOwnNotes",
+            "https://github.com/AppFlowy-IO/AppFlowy",
+        ]
+
+        deduped, warnings = _dedupe_urls(urls)
+
+        assert deduped == urls
+        assert warnings == []
+
+    def test_drops_exact_duplicate_and_warns(self) -> None:
+        """An identical URL repeated is dropped, keeping only the first."""
+
+        url = "https://github.com/pbek/QOwnNotes"
+
+        deduped, warnings = _dedupe_urls([url, url])
+
+        assert deduped == [url]
+        assert len(warnings) == 1
+        warning = warnings[0]
+        # label is key[1], the casefolded repo name -- not the original casing
+        assert warning.package == "qownnotes"
+        assert warning.code == WarningCode.DUPLICATE_TARGET_SKIPPED
+        assert warning.stage == Stage.QUERY.value
+
+    def test_case_insensitiv_owner_repo_treated_as_duplicate(self) -> None:
+        """Dedup key is casefolded (owner, repo), not raw string equality
+        different casing of the same repo must still collapse to one target.
+        """
+        urls = [
+            "https://github.com/pbek/QOwnNotes",
+            "https://github.com/PBEK/qownnotes",
+        ]
+
+        deduped, warnings = _dedupe_urls(urls)
+
+        assert deduped == [urls[0]]
+        assert len(warnings) == 1
+        # label comes from the *second* (duplicate) url's casefolded repo
+        assert warnings[0].package == "qownnotes"
+
+    def test_trailing_dot_git_suffix_treated_as_duplicate(self) -> None:
+        """parse_github_url strips '.git', so both forms must dedupe to the
+        same (owner, repo) key -- this is exactly the race download.py's
+        dest_path collision this func exists to prevent.
+        """
+        urls = [
+            "https://github.com/pbek/QOwnNotes",
+            "https://github.com/pbek/QOwnNotes.git",
+        ]
+
+        deduped, warnings = _dedupe_urls(urls)
+        assert deduped == [urls[0]]
+        assert len(warnings) == 1
+
+    def test_invalid_urls_deduped_by_war_string_only(self) -> None:
+        """URLs that fail parse_github_url fallback to a plain-string key,
+        per the documented behavior - so an identical unparseable string
+        repeated is still recognized as a duplicate.
+        """
+        bad = "not-a-github-url"
+
+        deduped, warnings = _dedupe_urls([bad, bad])
+
+        assert deduped == [bad]
+        assert len(warnings) == 1
+        # key isn't a tuple here, so label fallsback to the raw url
+        assert warnings[0].package == bad
+
+    def test_different_invalid_urls_are_not_deduped_against_each_other(
+        self,
+    ) -> None:
+        """Two distinct unparseable strings must not collide just because
+        they both failed to parse -- each still surfaces its own INVALID_URL
+        PackageError downstream in _install_one.
+        """
+        urls = ["not-a-url-1", "not-a-url-2"]
+
+        deduped, warnings = _dedupe_urls(urls)
+
+        assert deduped == urls
+        assert warnings == []
+
+    def test_multiple_duplicates_each_produce_their_own_warning(self) -> None:
+        """Three occurences of the same repo must yield exactly two
+        DUPLICATE_TARGET_SKIPPED warnings (one per dropped occurence),
+        not one warning for the whole group.
+        """
+        url = "https://github.com/a/a"
+        urls = [url, url, url]
+
+        deduped, warnings = _dedupe_urls(urls)
+
+        assert deduped == [url]
+        assert len(warnings) == 2
+        assert all(
+            w.code == WarningCode.DUPLICATE_TARGET_SKIPPED for w in warnings
+        )
+
+    def test_preserves_first_occurence_order_with_interleaved_duplicate(
+        self,
+    ) -> None:
+        """A duplicate appering mid-list must not disturb the relative
+        order of the surviving, unique targets.
+        """
+        urls = [
+            "https://github.com/a/a",
+            "https://github.com/b/b",
+            "https://github.com/a/a",  # duplicate of the first
+            "https://github.com/c/c",
+        ]
+
+        deduped, warnings = _dedupe_urls(urls)
+
+        assert deduped == [
+            "https://github.com/a/a",
+            "https://github.com/b/b",
+            "https://github.com/c/c",
+        ]
+        assert len(warnings) == 1
+        assert warnings[0].package == "a"
+
+    def test_empty_list_returns_empty_results(self) -> None:
+        """Degenerate empty input must not raise and returns empty
+        containers of the correct types.
+        """
+        deduped, warnings = _dedupe_urls([])
+
+        assert deduped == []
+        assert warnings == []
+
+    def test_mixed_valid_and_invalid_urls_dedupe_independently(self) -> None:
+        """A valid duplicate and an invalid duplicate in the same batch
+        must each be caught by their respective key stragety, without
+        interfering with each other.
+        """
+        urls = [
+            "https://github.com/pbek/QOwnNotes",
+            "not-a-github-url",
+            "https://github.com/pbek/QOwnNotes",  # dup of #1 (tuple key)
+            "not-a-github-url",  # dup of #2 (string key)
+        ]
+        deduped, warnings = _dedupe_urls(urls)
+
+        assert deduped == [
+            "https://github.com/pbek/QOwnNotes",
+            "not-a-github-url",
+        ]
+        assert len(warnings) == 2
+        packages = {w.package for w in warnings}
+        assert packages == {"qownnotes", "not-a-github-url"}
