@@ -1,4 +1,4 @@
-"""Configuration and logging setup for appman."""
+"""Config setups for appman."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def init_config() -> None:
-    """Create xdg dirs."""
+    """Create XDG supported config dirs."""
     for dirs in (
         CONFIG_DIR,
         LOG_DIR,
