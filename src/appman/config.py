@@ -17,7 +17,12 @@ logger = logging.getLogger(__name__)
 
 
 def init_config() -> None:
-    """Create XDG supported config dirs."""
+    """Create XDG supported config dirs.
+
+    Raises:
+        OSError: If a directory cannot be created (e.g. permission denied).
+            Not caught — a broken XDG setup must surface as a hard failure.
+    """
     for dirs in (
         CONFIG_DIR,
         LOG_DIR,
@@ -34,6 +39,6 @@ def init_config() -> None:
                 logger.info("Created directory: %s", dirs)
             else:
                 logger.debug("Directory already exists: %s", dirs)
-        except Exception:
-            logger.error("Failed to create directory: %s", dirs)
+        except OSError:
+            logger.exception("Failed to create directory: %s", dirs)
             raise

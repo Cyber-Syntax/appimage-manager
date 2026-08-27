@@ -49,6 +49,11 @@ def install_cmd(args: Namespace) -> None:
 
     Returns:
         None
+
+    Raises:
+        SystemExit: Propagated from install(). Exit code 1 on partial/total
+            failure, per install.py's contract (this is a documented CLI
+            contract, not an implementation detail).
     """
     install(args.urls)
 
