@@ -246,14 +246,14 @@ latest stable release
 ## 9. Verification Workflow
 
 ```
-has checksum/digest?
+has checksum_file/digest?
   yes → verify
           pass → VERIFIED
           fail → prompt: install-without-verify or abort [y/n]
                    y → install continues, status=FAILED (recorded)
-                   n → abort, nothing installed
+                   n → abort, remove corrupted appimage
   no  → catalog/user config allows skip?
-          yes → status=SKIPPED, warn, remember decision in per-app JSON
+          yes → status=SKIPPED, warn, remember decision in per-app JSON(if this is the second installation; 1. Question not going to asked user again. 2. if verification found, verify it no matter what is the decision from user.)
           no  → status=MISSING, warn (may be upstream or appman limitation)
 ```
 

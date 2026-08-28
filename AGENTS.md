@@ -6,7 +6,7 @@ Guidance for AI coding agents (and humans) working on **appimage-manager** (`app
 
 `appman` is a Linux-only CLI for installing, updating, verifying, backing up,
 restoring, and removing AppImages — pacman-style, scriptable, checksum-verified.
-Distributed via `uv`. No GUI, no web interface, no plugin system (see Non-Goals).
+Distributed via `uv`. No GUI, no web interface, no plugin system.
 
 Read `PRD.md` / `ARCHITECTURE.md` in full before making structural changes.
 This file summarizes the load-bearing rules an agent must not violate.
@@ -18,18 +18,23 @@ This file summarizes the load-bearing rules an agent must not violate.
 - `aiohttp` for async networking
 - `dataclasses` (with `slots=True`) for all data models
 - Packaging/install via `uv`
-- Linux-only — do not add cross-platform shims or path logic for macOS/Windows
+- Linux-only
 
 ## 3. Module Layout — Respect Boundaries
 
 ```
-mycli/
+appman/
+  api.py        # GitHub REST client
   cli.py        # argument parsing, dispatch only
   config.py     # global + per-app config load/save/migrate
-  install.py    # install orchestration
-  update.py     # update orchestration
-  api.py        # GitHub REST client
+  constants.py
+  download.py   # downloading assets (e.g appimage)
   file_ops.py   # download, extract, desktop entry, icon
+  install.py    # install orchestration
+  logger.py     # logging configurations
+  main.py       # main orchestration
+  models.py     # Canonical data models
+  verify.py     # Verifying appimage
 ```
 
 Rule of thumb (GH-013): each CLI command maps to **one orchestration module**
@@ -298,7 +303,6 @@ Never allow two state-changing commands to run concurrently against the same sta
 - REST API only (not GraphQL), for release metadata/assets. Unauthenticated limit: 60 req/hr.
 - Actual AppImage **downloads** go through direct asset URLs, not the REST API — they must never consume rate limit.
 - Prefer `github_digest` (API-embedded SHA256) as first-class verification source alongside checksum files — don't treat checksum files as the only verification method.
-- Token/auth support (`auth --status`) is post-MVP; don't gate MVP install/update flows on it.
 
 ## 12. Release Asset Selection Algorithm
 
@@ -343,22 +347,3 @@ while fixing something else.
 - Regression benchmarks for update-check latency and install runtime should
   not silently regress.
 - Release checklist smoke tests: install, update, remove, token, cache, migrate.
-- When adding a feature, add tests in the same PR — don't defer.
-
-## 15. Non-Goals (do not implement)
-
-- GUI or web interface
-- Non-Linux platform support
-- Plugin systems or extension APIs
-
-If a request pushes toward any of these, flag it rather than building it.
-
-## 16. When Extending the PRD
-
-MVP vs. post-MVP matters — GitLab/direct-website install, fuzzy shell
-completion, GitHub token support, JSON Schema validation, backup/restore,
-self-upgrade, global TOML settings, and bulk install are all **post-MVP**.
-
-Don't casually implement these while touching adjacent MVP code without
-calling it out — scope creep here breaks the "learn testing well" goal in §10
-by making the codebase harder to reason about incrementally.
