@@ -114,9 +114,9 @@ def test_main_exits_1_and_prints_help_when_no_func(
         patch("appman.main.create_parser", return_value=fake_parser),
         patch("appman.main.parse_args", return_value=fake_args),
         caplog.at_level(logging.ERROR, logger="appman.main"),
+        pytest.raises(SystemExit) as exc_info
     ):
-        with pytest.raises(SystemExit) as exc_info:
-            main()
+        main()
 
     assert exc_info.value.code == 1
     fake_parser.print_help.assert_called_once_with()
@@ -138,9 +138,9 @@ def test_main_does_not_swallow_init_config_failure() -> None:
             "appman.main.init_config", side_effect=OSError("permission denied")
         ),
         patch("appman.main.init_log") as mock_init_log,
+        pytest.raises(OSError, match="permission denied")
     ):
-        with pytest.raises(OSError, match="permission denied"):
-            main()
+        main()
 
     mock_init_log.assert_not_called()  # never reached -- proves short-circuit
 
@@ -161,8 +161,8 @@ def test_main_does_not_swallow_dispatched_command_failure(
         patch("appman.main.init_log"),
         patch("appman.main.create_parser", return_value=fake_parser),
         patch("appman.main.parse_args", return_value=fake_args),
+        pytest.raises(SystemExit) as exc_info,
     ):
-        with pytest.raises(SystemExit) as exc_info:
-            main()
+        main()
 
     assert exc_info.value.code == 1
