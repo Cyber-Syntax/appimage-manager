@@ -6,6 +6,7 @@ import logging
 
 from .constants import (
     APPIMAGES_DIR,
+    BACKUP_DIR,
     CACHE_DIR,
     CATALOG_DIR,
     CONFIG_DIR,
@@ -30,6 +31,7 @@ def init_config() -> None:
         APPIMAGES_DIR,
         CATALOG_DIR,
         CACHE_DIR,
+        BACKUP_DIR,
     ):
         was_missing = not dirs.exists()
         logger.debug("Creating directory: %s", dirs)

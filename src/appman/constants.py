@@ -10,7 +10,7 @@ CONFIG_FILE = CONFIG_DIR / "config.toml"
 LOG_DIR = Path.home() / ".local" / "state" / "appman"
 LOG_FILE = LOG_DIR / "main.log"
 # XDG_DATA_HOME: $HOME/.local/share
-# TODO: add backup also in data home section when you add that feature
+BACKUP_DIR = Path.home() / ".local" / "share" / "appman" / "backup"
 DATA_DIR = Path.home() / ".local" / "share" / "appman"
 APPIMAGES_DIR = DATA_DIR / "appimages"
 CATALOG_DIR = DATA_DIR / "catalog"
