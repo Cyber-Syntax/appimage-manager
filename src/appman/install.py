@@ -186,6 +186,8 @@ async def _install_one(
             session=session,
             package=package,
             selected=selected,
+            # TODO: refactor destination to download dir like a cache path
+            # use file_ops.py module to move verified to APPIMAGES_DIR
             dest_dir=APPIMAGES_DIR,
         )
         if isinstance(result, PackageError):

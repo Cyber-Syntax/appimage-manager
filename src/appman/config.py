@@ -34,7 +34,15 @@ def init_config() -> None:
         was_missing = not dirs.exists()
         logger.debug("Creating directory: %s", dirs)
         try:
+            # NOTE:
+            # parents: make it create parent dirs like if ~/.config parent
+            # not exist when ~/.config/appman/, than it create config, appman
+            #
+            # exist_ok: call the mkdir even dir exist but call is harmless
+            # which cover existence check internally and do nothing if exist
             dirs.mkdir(parents=True, exist_ok=True)
+
+            # Write good log messages for user feedback and debugging
             if was_missing:
                 logger.info("Created directory: %s", dirs)
             else:
