@@ -52,9 +52,13 @@ def _parse_checksum_file(content: str, target_name: str) -> str | None:
             continue
 
         logger.debug("Checksum file line parsed: %s", line)
+
         hash_value, filename = match.groups()
-        filename = filename.strip().lstrip("./")
-        if filename == target_name or filename.endswith(target_name):
+        filename = filename.strip()
+
+        # Checksum files may contain paths such as ./releases/app.AppImage.
+        # Match the exact basename, not a suffix.
+        if Path(filename).name == target_name:
             logger.debug(
                 "Checksum file line matches target: %s -> %s",
                 filename,
