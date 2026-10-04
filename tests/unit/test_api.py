@@ -75,7 +75,10 @@ class _FakeResponse:
     def raise_for_status(self) -> None:
         if self._raise_on_status:
             raise aiohttp.ClientResponseError(
-                request_info=MagicMock(), history=(), status=self.status
+                request_info=MagicMock(),
+                history=(),
+                status=self.status,
+                headers=self.headers,
             )
 
     async def json(self) -> dict[str, Any]:
@@ -314,6 +317,59 @@ class TestFetchLatestRelease:
         assert result.code == ErrorCode.MALFORMED_RESPONSE
         assert result.retryable is False
         cache_spy.assert_not_called()  # contract: never cache malformed JSON
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_returns_rate_limited_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A 403 with X-RateLimit-Remaining=0 is a structured RATE_LIMITED error."""
+        cache_spy = MagicMock()
+        monkeypatch.setattr("appman.api.cache_release_data", cache_spy)
+
+        response = _FakeResponse(status=403, raise_on_status=True)
+        response.headers["X-RateLimit-Remaining"] = "0"
+        session = _FakeSession(response)
+
+        result = await fetch_latest_release(
+            session,
+            "owner",
+            "repo",
+            "pkg",
+        )
+
+        assert isinstance(result, PackageError)
+        assert result.kind == ErrorKind.NETWORK
+        assert result.code == ErrorCode.NETWORK_RATE_LIMITED
+        assert result.retryable is True
+        cache_spy.assert_not_called()  # contract: never cache rate-limited responses
+
+    @pytest.mark.asyncio
+    async def test_cache_failure_still_returns_release(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        sample_release_payload: dict[str, Any],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """If the cache write fails, the release is still returned to the caller."""
+
+        def fail_cache(*args: object, **kwargs: object) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr("appman.api.cache_release_data", fail_cache)
+        caplog.set_level("WARNING", logger="appman.api")
+
+        result = await fetch_latest_release(
+            _FakeSession(
+                _FakeResponse(status=200, json_body=sample_release_payload)
+            ),
+            "owner",
+            "repo",
+            "pkg",
+        )
+
+        assert not isinstance(result, PackageError)
+        assert result.tag_name == "v1.2.3"
+        assert "Failed to cache release data" in caplog.text
 
 
 # _parse_release_data / _parse_release_asset
