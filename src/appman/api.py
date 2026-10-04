@@ -1,5 +1,6 @@
 """Utilities for interacting with the GitHub API."""
 
+import json
 import logging
 import re
 from typing import cast
@@ -166,7 +167,7 @@ async def fetch_latest_release(
                     raw = cast("GitHubReleasePayload", await response.json())
                 except (
                     aiohttp.ContentTypeError,
-                    orjson.JSONDecodeError,
+                    json.JSONDecodeError,
                     UnicodeDecodeError,
                 ) as exc:
                     logger.warning(
