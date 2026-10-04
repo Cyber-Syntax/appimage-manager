@@ -473,6 +473,18 @@ class TestSelectAppimageAsset:
             result.checksum_file.name == "QOwnNotes-x86_64.AppImage.sha256sum"
         )
 
+    def test_does_not_match_checksum_for_appimage_name_sibling(self) -> None:
+        """A suffix such as '-beta' must not match the selected AppImage."""
+        assets = [
+            make_release_asset("app.AppImage"),
+            make_release_asset("app.AppImage-beta.sha256"),
+        ]
+
+        result = select_appimage_asset(assets, "pkg")
+
+        assert not isinstance(result, PackageError)
+        assert result.checksum_file is None
+
     def test_falls_back_to_release_wide_checksum_manifest(self) -> None:
         """When no per-file checksum exists, a release-wide manifest (SHA256SUMS) is used."""
         assets = [
