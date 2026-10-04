@@ -1,7 +1,7 @@
 [project]
 name = 'appman'
 version = '0.1.0-alpha'
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
 description = 'appimage-manager is a command-line tool to manage AppImages on Linux. It allows users to install, update, and manage AppImages from GitHub repositories easily. It is designed to simplify the process of handling AppImages, making it more convenient for users to keep their applications up-to-date.'
 keywords = ["appimage", "appimage-manager"]
 requires-python = ">= 3.12"
@@ -9,12 +9,11 @@ authors = [{ name = "Cyber-Syntax" }]
 dependencies = ["aiohttp>=3.12", "orjson>=3.10"]
 classifiers = [
   "Development Status :: 3 - Alpha",
-  "Intended Audience :: Developers, Linux Users",
-  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Environment :: Console",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Operating System :: POSIX :: Linux",
 ]
 readme = { file = "README.md", content-type = "text/markdown" }
@@ -36,6 +35,7 @@ dev = [
   "pip-audit>=2",
   "pytest-cov>=4",
   "pytest-asyncio>=1.4.0",
+  "pytest-env>=1.4.0",
 ]
 lint = ["ruff>=0.15"]
 
