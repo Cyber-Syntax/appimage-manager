@@ -14,16 +14,19 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     """Run the cli application."""
-    # mkdir xdg config locations
-    init_config()
-    # init file and console logger
-    init_log()
-    logger.debug("Starting appman...")
+    # NOTE: init_config() and init_log() are called after parse_args() because
+    # --version and --help are handled by argparse before any subcommand is invoked.
 
     # build the whole parser tree...
     parser = create_parser()
     # parse the arguments like install, URLs
     args = parse_args(parser)
+
+    # mkdir xdg config locations
+    init_config()
+    # init file and console logger
+    init_log()
+    logger.debug("Starting appman...")
 
     # when `appman install` passed, hasattr is True because
     # install_parser.set_defaults to install_cmd(see cli.py)

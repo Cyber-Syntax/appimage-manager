@@ -127,6 +127,14 @@ Example usage:
         help="GitHub release URLs (e.g. https://github.com/owner/repo)",
     )
 
+    _ = install_parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"appman {__version__}",
+        help="Show version information",
+    )
+
     # add the default command for the install_parser
     install_parser.set_defaults(func=install_cmd)
 
