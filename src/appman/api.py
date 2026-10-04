@@ -81,7 +81,6 @@ _EMBEDDED_INCOMPATIBLE_EXT_RE = re.compile(
 )
 
 
-# TODO: make it case-insensitive
 def parse_github_url(url: str) -> tuple[str, str] | PackageError:
     """Extract the repository owner and name from a GitHub URL.
 
@@ -144,6 +143,7 @@ async def fetch_latest_release(
                 url, timeout=aiohttp.ClientTimeout(total=15)
             ) as response:
                 logger.debug("Received response: %s", response)
+
                 if response.status == HTTP_404:
                     return PackageError(
                         package=package,
@@ -152,7 +152,9 @@ async def fetch_latest_release(
                         stage=Stage.QUERY.value,
                         retryable=True,
                     )
+
                 response.raise_for_status()
+
                 # NOTE: aiohttp.json is typed Any - this is the one deliberate
                 # boundry crossing. Parse into GitHubRelease immediately
                 # so Any never escapes this function.
@@ -161,11 +163,31 @@ async def fetch_latest_release(
                 # needs to be downloaded and parsed as JSON. That's a second,
                 # seperate wait. "await response.json()" pauses this task
                 # again until the whole body has arrived and been parsed.
-                raw = cast("GitHubReleasePayload", await response.json())
-                logger.debug("Raw release data: %s", raw)
-                cache_release_data(owner, repo, raw)
                 try:
-                    return _parse_release_data(raw)
+                    raw = cast("GitHubReleasePayload", await response.json())
+                except (
+                    aiohttp.ContentTypeError,
+                    orjson.JSONDecodeError,
+                    UnicodeDecodeError,
+                ) as exc:
+                    logger.warning(
+                        "Malformed JSON response for %s/%s: %s",
+                        owner,
+                        repo,
+                        exc,
+                    )
+                    return PackageError(
+                        package=package,
+                        kind=ErrorKind.ASSET,
+                        code=ErrorCode.MALFORMED_RESPONSE,
+                        stage=Stage.QUERY.value,
+                        retryable=False,
+                    )
+
+                logger.debug("Raw release data: %s", raw)
+
+                try:
+                    release = _parse_release_data(raw)
                 except (KeyError, TypeError) as exc:
                     logger.warning(
                         "Malformed release payload for %s/%s: %s",
@@ -180,6 +202,10 @@ async def fetch_latest_release(
                         stage=Stage.QUERY.value,
                         retryable=False,
                     )
+
+                cache_release_data(owner, repo, raw)
+                return release
+
         except aiohttp.ClientConnectorError:
             return PackageError(
                 package=package,
