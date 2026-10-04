@@ -123,12 +123,15 @@ extract_version() {
 # Arguments:
 # >>: append redirection; it takes whatever echo prints and adds it to
 #     the bottom of the file specified by $GITHUB_OUTPUT
+#
+# Returns:
+#   1: fails if version is "Unreleased"
 #######################################
 is_version_unreleased() {
   if [[ "$version" =~ ^[Uu]nreleased$ ]]; then
     echo "is_unreleased=true" >>"$GITHUB_OUTPUT"
-    echo "::notice:Version is Unreleased, skipping release creation"
-    exit 0
+    echo "::error::CHANGELOG.md starts with [Unreleased]; add a released version header before creating a release tag"
+    exit 1
   fi
 
   echo "is_unreleased=false" >>"$GITHUB_OUTPUT"
@@ -208,7 +211,11 @@ convert_and_save_to_github_output() {
 
   # debug output
   echo "Release notes excerpt:"
-  echo "$notes" | head -10
+
+  # Print the first 10 lines of notes for debugging purposes
+  # sed continues to read the remaining lines without printing them
+  # printf is used here instead of echo to ensure that the notes are printed exactly as they are
+  printf '%s\n' "$notes" | sed -n '1,10p' 
 }
 
 #######################################
