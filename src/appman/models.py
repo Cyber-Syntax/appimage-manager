@@ -389,6 +389,8 @@ class ErrorCode(Enum):
     APPIMAGE_ASSET_NOT_FOUND = "appimage_asset_not_found"
     NETWORK_TIMEOUT = "network_timeout"
     NETWORK_DNS_FAILURE = "network_dns_failure"
+    NETWORK_RATE_LIMITED = "network_rate_limited"
+    NETWORK_HTTP_ERROR = "network_http_error"
     CHECKSUM_MISMATCH = "checksum_mismatch"
     PERMISSION_DENIED = "permission_denied"
     INVALID_URL = "invalid_url"
@@ -422,6 +424,8 @@ ERROR_MESSAGES: dict[ErrorCode, str] = {
         "so this might be external to appman's control."
     ),
     ErrorCode.NETWORK_TIMEOUT: "network timeout while downloading asset",
+    ErrorCode.NETWORK_HTTP_ERROR: "HTTP error while accessing the API",
+    ErrorCode.NETWORK_RATE_LIMITED: "rate limit exceeded while accessing the API",
     ErrorCode.NETWORK_DNS_FAILURE: "could not resolve upstream host",
     ErrorCode.PERMISSION_DENIED: "permission denied",
     # Real, parseable mismatch — security-relevant, always blocks by default

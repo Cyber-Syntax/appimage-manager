@@ -94,7 +94,7 @@ def parse_github_url(url: str) -> tuple[str, str] | PackageError:
     # Regex pattern to capture owner and repo
     # Handles: https://github.com/owner/repo | https://github.com/owner/repo.git
     # | git@github.com:owner/repo.git
-    pattern = r"(?:https?://github\.com/|git@github\.com:)(?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?"
+    pattern = r"(?:https?://github\.com/|git@github\.com:)(?P<owner>[^/?#]+)/(?P<repo>[^/?#]+?)(?:\.git)?(?:[/?#]|$)"
 
     logger.debug("Parsing GitHub URL: %s", url)
     match = re.search(pattern, url)
@@ -202,9 +202,40 @@ async def fetch_latest_release(
                         retryable=False,
                     )
 
-                cache_release_data(owner, repo, raw)
+                # NOTE: caching is best-effort, not critical to the main flow.
+                # If it fails, we log a warning but still return the release
+                # data to the caller.
+                try:
+                    cache_release_data(owner, repo, raw)
+                except OSError:
+                    logger.warning(
+                        "Failed to cache release data for %s/%s",
+                        owner,
+                        repo,
+                        exc_info=True,
+                    )
                 return release
 
+        # handle rate limiting and other HTTP errors
+        except aiohttp.ClientResponseError as exc:
+            is_rate_limited = (
+                exc.status == 403
+                and exc.headers.get("X-RateLimit-Remaining") == "0"
+            )
+            retryable = is_rate_limited or exc.status >= 500
+            return PackageError(
+                package=package,
+                kind=ErrorKind.NETWORK,
+                code=(
+                    ErrorCode.NETWORK_RATE_LIMITED
+                    if is_rate_limited
+                    else ErrorCode.NETWORK_HTTP_ERROR
+                ),
+                stage=Stage.QUERY.value,
+                retryable=retryable,
+            )
+
+        # cover the common network errors that can happen during the request
         except aiohttp.ClientConnectorError:
             return PackageError(
                 package=package,
