@@ -110,7 +110,6 @@ def parse_github_url(url: str) -> tuple[str, str] | PackageError:
     return match.group("owner"), match.group("repo")
 
 
-# TODO: add expection for malformed JSON body
 async def fetch_latest_release(
     session: aiohttp.ClientSession,
     owner: str,
@@ -298,7 +297,7 @@ def select_appimage_asset(
     FreeTube → prefer amd64/x86_64), then a matching checksum file is
     resolved against that specific AppImage.
 
-    Arguments:
+    Args:
         assets: The list of raw asset dictionaries from the GitHub API.
         package: The package name for error reporting.
 
@@ -329,7 +328,7 @@ def _select_best_appimage(
 ) -> Asset | PackageError:
     """Run the appimage-only selection pipeline (platform -> stability -> arch.
 
-    Arguments:
+    Args:
         parsed: The full list of classified assets from the release.
         package: The package name for error reporting.
 
@@ -378,7 +377,7 @@ def _select_matching_checksum_file(
     "KeePassXC-2.7.10-x86_64.dmg.DIGEST" is never mistaken for a match
     despite containing "x86_64".
 
-    Arguments:
+    Args:
         parsed: The full list of classified assets from the release.
         appimage: The AppImage asset already selected.
 
@@ -420,7 +419,7 @@ def _select_matching_checksum_file(
 def parse_asset(raw: ReleaseAsset) -> Asset:
     """Convert a raw GitHub API asset dict into an Asset.
 
-    Arguments:
+    Args:
         raw: The raw asset dictionary from the GitHub API.
 
     Returns:
@@ -443,7 +442,7 @@ def classify_asset_type(name: str) -> AssetType:
     .DIGEST, .yml, ...) or exact release-wide manifest names
     (SHA256SUMS, SHA256SUMS.txt, ...)
 
-    Arguments:
+    Args:
         name: The name of the filename to classify.
 
     Returns:
@@ -468,7 +467,7 @@ def is_incompatible_platform(name: str) -> bool:
     checksum file whose *true* suffix is .DIGEST), then falls back to the
     existing win/mac/arm keyword patterns.
 
-    Arguments:
+    Args:
         name: The name of the asset.
 
     Returns:
@@ -486,7 +485,7 @@ def is_incompatible_platform(name: str) -> bool:
 def is_unstable(name: str) -> bool:
     """Check if the asset name indicates an unstable version.
 
-    Arguments:
+    Args:
         name: The name of the asset.
 
     Returns:
@@ -499,7 +498,7 @@ def is_unstable(name: str) -> bool:
 def is_amd64(name: str) -> bool:
     """Check if the asset name indicates an AMD64 platform.
 
-    Arguments:
+    Args:
         name: The name of the asset.
 
     Returns:

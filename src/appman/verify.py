@@ -102,7 +102,7 @@ def verify_downloaded_appimage(
     always wins over a pass on the other; corruption on the file is a
     warning, not a failure, and doesn't mask a passing digest.
 
-    Arguments:
+    Args:
         appimage_path: The path to the downloaded AppImage.
         appimage_asset: The Asset object for the AppImage.
         checksum_path: The path to the downloaded checksum file, or None if

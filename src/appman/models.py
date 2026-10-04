@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 class DownloadedAsset:
     """A single asset that has been written to disk.
 
-    Arguments:
+    Args:
         asset: the Asset that was downloaded (Asset)
         path: the path on disk where the asset was written (Path)
     """
@@ -46,7 +46,7 @@ class DownloadedAsset:
 class AssetType(Enum):
     """Classifies a release asset for appman-internal purposes.
 
-    Arguments:
+    Args:
         APPIMAGE: the asset is an AppImage
         CHECKSUM_FILE: the asset is a checksum file (e.g. .DIGEST.txt)
     """
@@ -60,7 +60,7 @@ class AssetType(Enum):
 class Asset:
     """A single raw release asset, parsed from the GitHub API response.
 
-    Arguments:
+    Args:
         name: the name of the asset (e.g. "MyApp-x86_64.AppImage")
         download_url: the URL to download the asset
         size: the size of the asset in bytes
@@ -85,7 +85,7 @@ class Asset:
 class AppConfig:
     """Per-app persisted config (state JSON), one file per installed app.
 
-    Arguments:
+    Args:
         name: canonical name of the app (used in config file names, etc.)
         repo: GitHub repository (owner/repo)
         installed_version: the version string of the installed AppImage
@@ -120,7 +120,7 @@ class CatalogEntry:
     — appman still checks for a digest/checksum on every run regardless
     of this flag.
 
-    Arguments:
+    Args:
         name: canonical name of the app (used in config file names, etc.)
         repo: GitHub repository (owner/repo)
         default_asset_pattern: optional regex pattern to select the AppImage
@@ -140,7 +140,7 @@ class CatalogEntry:
 class GitHubAssetPayload(TypedDict):
     """Raw shape of one asset object in the GitHub releases API JSON.
 
-    Arguments:
+    Args:
         name: the name of the asset (e.g. "MyApp-x86_64.AppImage")
         browser_download_url: the URL to download the asset
         size: the size of the asset in bytes
@@ -159,7 +159,7 @@ class GitHubAssetPayload(TypedDict):
 class GitHubReleasePayload(TypedDict):
     """Raw shape of a GitHub release object in the GitHub releases API JSON.
 
-    Arguments:
+    Args:
         tag_name: the Git tag name of the release (e.g. "v1.2.3")
         name: the human-readable name of the release (e.g. "MyApp 1.2.3")
         prerelease: whether the release is a prerelease
@@ -184,7 +184,7 @@ class ReleaseAsset:
     `parse_asset`. Kept separate so api.py doesn't need to know about
     AssetType classification rules.
 
-    Arguments:
+    Args:
         name: the name of the asset (e.g. "MyApp-x86_64.AppImage")
         download_url: the URL to download the asset
         size: the size of the asset in bytes
@@ -204,7 +204,7 @@ class ReleaseAsset:
 class GitHubRelease:
     """A parsed GitHub release, ready for asset-selection.
 
-    Arguments:
+    Args:
         tag_name: the Git tag name of the release (e.g. "v1.2.3")
         release_name: the human-readable name of the release (e.g. "MyApp 1.2.3")
         prerelease: whether the release is a prerelease
@@ -229,7 +229,7 @@ class SelectedAssets:
     release has no checksum/.DIGEST asset — that's a normal, expected case,
     not an error.
 
-    Arguments:
+    Args:
         appimage: the selected AppImage asset (Asset)
         checksum_file: the selected checksum file asset (Asset) or None if not present
     """
@@ -246,7 +246,7 @@ class SelectedAssets:
 class VerificationStatus(Enum):
     """Verification status of an AppImage against digest and/or checksum file.
 
-    Arguments:
+    Args:
         VERIFIED: the AppImage was successfully verified
         FAILED: the AppImage failed verification
         MISSING: the AppImage could not be verified because the checksum file
@@ -267,7 +267,7 @@ class ChecksumResult:
     `method` distinguishes partial vs. full verification per
     "digest", "checksum_file", or "digest+checksum_file" when both passed.
 
-    Arguments:
+    Args:
         status: the verification status (VERIFIED, FAILED, MISSING, SKIPPED)
                 (VerificationStatus)
         method: the method used for verification (digest, checksum_file, or both)
@@ -293,7 +293,7 @@ class Stage(Enum):
 
     Stages are used for fine-grained progress reporting and logging.
 
-    Arguments:
+    Args:
         QUERY: querying upstream releases
         DOWNLOAD: downloading assets
         VERIFY: verifying downloaded assets
@@ -313,7 +313,7 @@ class Phase(Enum):
 
     Phases are used for higher-level progress reporting and logging.
 
-    Arguments:
+    Args:
         QUERY: querying upstream releases
         DOWNLOAD: downloading assets
         VERIFY: verifying downloaded assets
@@ -331,7 +331,7 @@ class Phase(Enum):
 class Event(Enum):
     """Emitted during install/update for progress reporting (--verbose, TUI).
 
-    Arguments:
+    Args:
         DOWNLOAD_STARTED: download of an asset has started
         DOWNLOAD_FINISHED: download of an asset has finished
         APPIMAGE_VERIFIED: AppImage has been successfully verified
@@ -356,7 +356,7 @@ class Event(Enum):
 class ErrorKind(Enum):
     """Broad category — used for --json grouping and log filtering.
 
-    Arguments:
+    Args:
         NETWORK: network-related errors (timeouts, DNS failures)
         ASSET: asset-related errors (missing, malformed, etc.)
         VERIFICATION: verification-related errors (checksum mismatches, etc.)
@@ -376,7 +376,7 @@ class ErrorKind(Enum):
 class ErrorCode(Enum):
     """Error codes are used for structured error reporting and logging.
 
-    Arguments:
+    Args:
         APPIMAGE_ASSET_NOT_FOUND: the AppImage asset was not found in the release
         NETWORK_TIMEOUT: a network timeout occurred while downloading an asset
         NETWORK_DNS_FAILURE: DNS resolution failed for the upstream host
@@ -400,7 +400,7 @@ class ErrorCode(Enum):
 class PackageError:
     """Returned, never raised, across module boundaries.
 
-    Arguments:
+    Args:
         package: the name of the package that encountered the error
         kind: the broad category of the error (ErrorKind)
         code: the specific error code (ErrorCode)
@@ -449,7 +449,7 @@ class WarningCode(Enum):
         build pipelines) — a data-quality problem, NOT a security failure,
         and must not block install on its own if another method passes.
 
-    Arguments:
+    Args:
         NO_CHECKSUM_SKIPPED: no checksum was provided by upstream,
                              skipping verification
         NO_CHECKSUM_UNSUPPORTED: checksum asset not found, some developers
@@ -471,7 +471,7 @@ class WarningCode(Enum):
 class PackageWarning:
     """Returned, never raised, across module boundaries.
 
-    Arguments:
+    Args:
         package: the name of the package that encountered the warning
         code: the specific warning code (WarningCode)
         stage: the stage of the transaction where the warning occurred (Stage)
@@ -511,7 +511,7 @@ WARNING_MESSAGES: dict[WarningCode, str] = {
 class InfoCode(Enum):
     """Info codes are used for structured info reporting and logging.
 
-    Arguments:
+    Args:
         QUERYING_UPSTREAM_RELEASES: querying upstream releases
         RETRIEVING_APPIMAGES: retrieving appimages
         PROCESSING_PACKAGE_CHANGES: processing package changes
