@@ -399,7 +399,7 @@ def _select_matching_checksum_file(
 
     Real-world checksum files come in two shapes:
       1. Per-file: named after the AppImage itself, e.g.
-         "QOwnNotes-x86_64.AppImage.sha256sum" for
+            if c.name.lower().startswith(appimage.name.lower() + ".")
          "QOwnNotes-x86_64.AppImage" — matched by prefix.
       2. Release-wide manifests covering every asset in the release, e.g.
          "SHA256SUMS" or "latest-linux.yml" — used only as a fallback
@@ -431,7 +431,8 @@ def _select_matching_checksum_file(
         (
             c
             for c in candidates
-            if c.name.lower().startswith(appimage.name.lower())
+            # + "." to avoid matching "KeePassXC-2.7.10-x86_64.AppImage-beta.sha256"
+            if c.name.lower().startswith(appimage.name.lower() + ".")
         ),
         None,
     )
