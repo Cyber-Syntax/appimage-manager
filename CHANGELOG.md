@@ -28,6 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bounded API and download concurrency.
 - Streaming asset downloads with temporary `.part` files.
 - Atomic download completion using file replacement.
-- GitHub release metadata caching.
-- XDG-compliant configuration, data, cache, backup, catalog, AppImage, and log directories.
+- Persisting GitHub release metadata as a JSON snapshot.  
+- Default configuration, data, cache, backup, catalog, AppImage, and log directories under standard XDG paths.  
 - File and stderr logging with rotating log files.

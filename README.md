@@ -68,7 +68,7 @@ Install one AppImage from a GitHub repository:
 uv run appman install https://github.com/pbek/QOwnNotes
 ```
 
-Install multiple repositories in one transaction:
+Install multiple repositories in one command:
 
 ```bash
 uv run appman install \

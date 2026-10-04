@@ -8,7 +8,7 @@ Guidance for AI coding agents (and humans) working on **appimage-manager** (`app
 restoring, and removing AppImages — pacman-style, scriptable, checksum-verified.
 Distributed via `uv`. No GUI, no web interface, no plugin system.
 
-Read `PRD.md` / `ARCHITECTURE.md` in full before making structural changes.
+Read `docs/PRD.md` / `docs/ARCHITECTURE.md` in full before making structural changes.
 This file summarizes the load-bearing rules an agent must not violate.
 
 ## 2. Tech Baseline
@@ -29,7 +29,7 @@ appman/
   config.py     # global + per-app config load/save/migrate
   constants.py
   download.py   # downloading assets (e.g appimage)
-  file_ops.py   # download, extract, desktop entry, icon
+  file_ops.py   # extract, desktop entry, icon
   install.py    # install orchestration
   logger.py     # logging configurations
   main.py       # main orchestration
@@ -51,7 +51,7 @@ Do not let `api.py` know about desktop entries/icons — that's `file_ops.py`.
 Config:    ~/.config/appman/
 State:     ~/.local/share/appman/
 Cache:     ~/.cache/appman/
-Backups:   ~/.local/share/appman/backups/
+Backups:   ~/.local/share/appman/backup/
 Catalog:   ~/.local/share/appman/catalog/
 Logs:      ~/.local/state/appman/
 AppImages: ~/.local/share/appman/appimages/
@@ -89,7 +89,7 @@ return PackageError(
     kind=ErrorKind.ASSET,
     code=ErrorCode.APPIMAGE_ASSET_NOT_FOUND,
     stage="query",
-    retryable=False,
+    retryable=True,
 )
 ```
 

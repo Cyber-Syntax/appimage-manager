@@ -3,7 +3,7 @@
 Install Command
 
 ```bash
-appman install standard-notes ytmdesktop qownnotes appflowy super-productivity keepassxc weektodo obsidian
+appman install standard-notes ytmdesktop qownnotes appflowy super-productivity keepassxc weektodo obsidian notion
 :: Querying upstream releases...
 GitHub                            92.1 MiB   4.7 MB/s 01:50  [####################] 100%
 error: failed retrieving appimage 'standard-notes' : Could not resolve host: gitlab.com
@@ -48,7 +48,7 @@ SKIPPED  qownnotes   already installed
 Update Command
 
 ```bash
-appman update standard-notes qownnotes appflowy weektodo legcord
+appman update standard-notes qownnotes appflowy weektodo legcord ytmdesktop
 :: Querying upstream releases...
 GitHub                            92.1 MiB   4.7 MB/s 01:50  [####################] 100%
 error: failed retrieving appimage 'standard-notes' : Could not resolve host: gitlab.com
@@ -70,6 +70,7 @@ UPDATED    qownnotes    26.2.4 -> 26.2.5
 UPDATED    appflowy     0.11.0 -> 0.11.1
 UPDATED    weektodo     1.30.0 -> 1.30.1
 FAILED     standard-notes
+FAILED     legcord
 FAILED     ytmdesktop
 :: Done.
 ```

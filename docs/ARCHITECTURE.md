@@ -98,7 +98,7 @@ class ReleaseAsset:
     content_type: str
 ```
 
-Open item: support `github_digest` (the API-embedded SHA256) as a first-class verification source, not just checksum files.
+GitHub API SHA256 digest is a first-class verification source alongside checksum files.  
 
 ### 6.4 SelectedAssets
 
@@ -248,13 +248,16 @@ latest stable release
 ```
 has checksum_file/digest?
   yes → verify
-          pass → VERIFIED
-          fail → prompt: install-without-verify or abort [y/n]
-                   y → install continues, status=FAILED (recorded)
+          found both → 
+                passed both → status=VERIFIED
+                fail one, pass other → status=VERIFIED (warn failed method)
+          fail both → prompt: install-without-verify or abort [y/n]
+                   y → install continues, status=FAILED (user can later re-verify, status saved as failed in per-app JSON but next install still would ask the same question again if fails)
                    n → abort, remove corrupted appimage
   no  → catalog/user config allows skip?
-          yes → status=SKIPPED, warn, remember decision in per-app JSON(if this is the second installation; 1. Question not going to asked user again. 2. if verification found, verify it no matter what is the decision from user.)
-          no  → status=MISSING, warn (may be upstream or appman limitation)
+          yes → status=SKIPPED, warn, remember decision in per-app JSON(if this is the second installation; 1. Question not going to asked user again. 2. if verification found, verify it no matter what is the decision from user.) This happens if the upstream developer didn't provide any checksum file but appman supports the app and the catalog json file has allow_skip_verify set to true.
+          no  → status=MISSING, warn (may be upstream or appman limitation). This happens if the
+          upstream developer didn't provide any checksum file or appman doesn't support the app.
 ```
 
 ### logging/errors
@@ -394,13 +397,28 @@ async with LockManager(lock_path):
 
 ### 15. Special warning/error for cli (Essential)
 
-If we support app in our catalog, we could now their dev doesn't provide a checksum, so we skip verification and warn the user we skipped verification but if we don't support the app - if the user installed via url - than we need to warn the user we didn't able to find it and skipped verification but this might be my-unicorn fault or the app developer didn't provide a checksum.
+If we support app in our catalog, we could now their dev doesn't provide a checksum, so we skip verification and warn the user we skipped verification but if we don't support the app - if the user installed via url - than we need to warn the user we didn't able to find it and skipped verification but this might be appman fault or the app developer didn't provide a checksum.
 
 Hard rule: **never raise domain errors across module boundaries; always return a structured `PackageError`/`PackageWarning`.** Exceptions are reserved for truly exceptional/internal failures, not expected business outcomes. `ERROR_MESSAGES`/`WARNING_MESSAGES` dicts centralize user-facing text for future i18n.
 
 ```python
 from enum import Enum
 from dataclasses import dataclass
+
+class Event(Enum):
+    DOWNLOAD_STARTED = auto()
+    DOWNLOAD_FINISHED = auto()
+    APPIMAGE_VERIFIED = auto()
+    APPIMAGE_VERIFICATION_SKIPPED = auto()
+    APPIMAGE_INSTALLED = auto()
+    APPIMAGE_FAILED = auto()
+
+class Phase(Enum):
+    QUERY = auto()
+    DOWNLOAD = auto()
+    VERIFY = auto()
+    INSTALL = auto()
+    SUMMARY = auto()
 
 class Stage(Enum):
     QUERY = "query"
@@ -427,7 +445,7 @@ class ErrorCode(Enum):
 
 ERROR_MESSAGES = {
     ErrorCode.APPIMAGE_ASSET_NOT_FOUND:
-        "appimage asset not found : appimage builds may still be processing, try again later. Some developers may not provide appimage builds, so this might be external to my-unicorn's control.",
+        "appimage asset not found : appimage builds may still be processing, try again later. Some developers may not provide appimage builds, so this might be external to appman's control.",
 
     ErrorCode.NETWORK_TIMEOUT:
         "network timeout while downloading asset",
@@ -441,7 +459,7 @@ ERROR_MESSAGES = {
     ErrorCode.CHECKSUM_MISMATCH:
         "checksum verification failed",
 
-    ErrorCode.UNKNOWN:
+    ErrorCode.UNKNOWN_ERROR:
         "an unknown error occurred",
 }
 
@@ -454,7 +472,7 @@ WARNING_MESSAGES = {
         "no checksum provided by upstream : skipping verification",
 
     WarningCode.NO_CHECKSUM_UNSUPPORTED:
-        "checksum asset not found : some developers not provide any, please report an issue for the package maintainers if you verified this isn't my-unicorn fault",
+        "checksum asset not found : some developers not provide any, please report an issue for the package maintainers if you verified this isn't appman fault",
 }
 
 @dataclass
@@ -478,7 +496,7 @@ error = PackageError(
     kind=ErrorKind.ASSET,
     code=ErrorCode.APPIMAGE_ASSET_NOT_FOUND,
     stage="query",
-    retryable=False,
+    retryable=True,
 )
 # print stdout
 print(
@@ -522,30 +540,17 @@ Stage
 important detail, never raise, return structured errors:
 
 ```python
-# no raise
+# WRONG: don't raise, return structured error
 raise AssetNotFoundError()
 
-# return package error
-return PackageError()
-```
-
-# 3. Internal Architecture
-
-```python
-class Event(Enum):
-    DOWNLOAD_STARTED = auto()
-    DOWNLOAD_FINISHED = auto()
-    APPIMAGE_VERIFIED = auto()
-    APPIMAGE_VERIFICATION_SKIPPED = auto()
-    APPIMAGE_INSTALLED = auto()
-    APPIMAGE_FAILED = auto()
-
-class Phase(Enum):
-    QUERY = auto()
-    DOWNLOAD = auto()
-    VERIFY = auto()
-    INSTALL = auto()
-    SUMMARY = auto()
+# RIGHT: return structured error
+return PackageError(
+  package="ytmdesktop",
+  kind=ErrorKind.ASSET,
+  code=ErrorCode.APPIMAGE_ASSET_NOT_FOUND,
+  stage="query",
+  retryable=True,
+)
 ```
 
 ## 16. User stories
