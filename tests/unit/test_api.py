@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 from unittest.mock import MagicMock
 
 import aiohttp
+import orjson
 import pytest
 
 from appman.api import (
@@ -58,10 +58,12 @@ class _FakeResponse:
         status: int = 200,
         json_body: dict[str, Any] | None = None,
         raise_on_status: bool = False,
+        json_error: Exception | None = None,
     ) -> None:
         self.status = status
         self._json_body = json_body or {}
         self._raise_on_status = raise_on_status
+        self._json_error = json_error
         self.headers: dict[str, str] = {}
 
     async def __aenter__(self) -> _FakeResponse:
@@ -77,6 +79,8 @@ class _FakeResponse:
             )
 
     async def json(self) -> dict[str, Any]:
+        if self._json_error is not None:
+            raise self._json_error
         return self._json_body
 
 
@@ -233,6 +237,83 @@ class TestFetchLatestRelease:
 
         assert isinstance(result, PackageError)
         assert result.kind == ErrorKind.NETWORK
+
+    @pytest.mark.parametrize(
+        "json_error",
+        [
+            aiohttp.ContentTypeError(
+                request_info=MagicMock(),
+                history=(),
+                message="response is not JSON",
+            ),
+            orjson.JSONDecodeError("invalid JSON", "not-json", 0),
+            UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte"),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_malformed_json_response_returns_package_error(
+        self, json_error: Exception, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Malformed response bodies return MALFORMED_JSON error."""
+        cache_spy = MagicMock()
+        monkeypatch.setattr("appman.api.cache_release_data", cache_spy)
+
+        session = _FakeSession(
+            _FakeResponse(
+                status=200,
+                json_error=json_error,
+            )
+        )
+
+        result = await fetch_latest_release(
+            session,
+            "owner",
+            "repo",
+            "pkg",
+        )
+
+        assert isinstance(result, PackageError)
+        assert result.kind == ErrorKind.ASSET
+        assert result.code == ErrorCode.MALFORMED_RESPONSE
+        assert result.retryable is False
+        cache_spy.assert_not_called()  # contract: never cache malformed JSON
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {},
+            "not-a-dict",
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_malformed_release_payload_returns_structured_error(
+        self,
+        payload: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Malformed JSON objects return MALFORMED_JSON error, never raise."""
+        cache_spy = MagicMock()
+        monkeypatch.setattr("appman.api.cache_release_data", cache_spy)
+
+        session = _FakeSession(
+            _FakeResponse(
+                status=200,
+                json_body=payload,
+            )
+        )
+
+        result = await fetch_latest_release(
+            session,
+            "owner",
+            "repo",
+            "pkg",
+        )
+
+        assert isinstance(result, PackageError)
+        assert result.kind == ErrorKind.ASSET
+        assert result.code == ErrorCode.MALFORMED_RESPONSE
+        assert result.retryable is False
+        cache_spy.assert_not_called()  # contract: never cache malformed JSON
 
 
 # _parse_release_data / _parse_release_asset
@@ -468,4 +549,4 @@ class TestCacheReleaseData:
 
         expected_file = tmp_path / "owner_repo_latest.json"
         assert expected_file.exists()
-        assert json.loads(expected_file.read_bytes()) == payload
+        assert orjson.loads(expected_file.read_bytes()) == payload
