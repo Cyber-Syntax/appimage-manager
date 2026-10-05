@@ -21,6 +21,7 @@ from .models import (
     PackageError,
     PackageWarning,
     Stage,
+    VerificationStatus,
     WarningCode,
 )
 
@@ -194,8 +195,22 @@ async def _install_one(
         if isinstance(result, PackageError):
             return package, result
 
-        appimage_path, _, warnings = result
+        appimage_path, verification, warnings = result
         logger.debug("Downloaded: %s", appimage_path)
+
+        # TODO: currently this directly block if one of the method really mismatch
+        # we might need to change the verify-policy to decrease the strictness
+        # because checksum_files getting coruppted by the tools that created
+        # them is not a rare case, and we can still verify the appimage
+        # by github digest...
+        if verification.status is VerificationStatus.FAILED:
+            return package, PackageError(
+                package=package,
+                code=ErrorCode.CHECKSUM_MISMATCH,
+                kind=ErrorKind.VERIFICATION,
+                stage=Stage.VERIFY.value,
+                retryable=False,
+            )
 
         for warning in warnings:
             _print_package_warning(warning)
