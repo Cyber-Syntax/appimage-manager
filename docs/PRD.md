@@ -102,9 +102,8 @@ Global flags: `--verbose`, `--version/-v`, `--noprogressbar`, `--no-color`, `--j
   2. checksum_file: A matching checksum asset, when published by the release.
 - Verification results distinguish passed, failed, missing, and corrupt checksum data. A checksum mismatch is reported as a security-relevant failure; an unparseable checksum file is reported separately as a warning.
 - Basically, if one method verifies the appimage, then the appimage is considered verified. If both methods fail, then the appimage is considered failed but user can choose to skip the verification if both verification fails (e.g STATUS=FAILED).
-- If the upstream developer didn't provide any checksum file but appman supports the app and the catalog json file has allow_skip_verify set to true, then user can choose to skip the verification (e.g STATUS=SKIPPED).
 - If the upstream developer didn't provide any checksum file and appman doesn't support the app, then appman will warn (e.g STATUS=MISSING). This warning happens if one of the method verified the app, otherwise STATUS=FAILED section will be shown to the user.
-- If the upstream developer didn't provide any checksum file but appman supports the app and the catalog json file has allow_skip_verify set to true, then user can choose to skip the verification (e.g STATUS=SKIPPED). This happens if the upstream developer didn't provide any checksum file or even digest is available but appman supports the app and the catalog json file has allow_skip_verify set to true. This basically means appimage installed without verification.
+- If the upstream developer didn't provide any checksum file but appman supports the app and the catalog json file has allow_skip_verify set to true, then user can choose to skip the verification (e.g STATUS=SKIPPED). This happens if the upstream developer didn't provide any checksum file or even digest isn't available but appman supports the app and the catalog json file has allow_skip_verify set to true. This basically means appimage installed without verification.
 
 ## 10. Success Criteria
 

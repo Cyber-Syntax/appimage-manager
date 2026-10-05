@@ -28,7 +28,7 @@ appman/
 Config:    ~/.config/appman/
 State:     ~/.local/share/appman/
 Cache:     ~/.cache/appman/
-Backups:   ~/.local/share/appman/backups/
+Backups:   ~/.local/share/appman/backup/
 Catalog:   ~/.local/share/appman/catalog/
 Logs:      ~/.local/state/appman/
 AppImages: ~/.local/share/appman/appimages/
@@ -251,7 +251,7 @@ has checksum_file/digest?
           found both → 
                 passed both → status=VERIFIED
                 fail one, pass other → status=VERIFIED (warn failed method)
-          fail both → prompt: install-without-verify or abort [y/n]
+          fail both → prompt: install-without-verify or abort [y/n] -> status=FAILED
                    y → install continues, status=FAILED (user can later re-verify, status saved as failed in per-app JSON but next install still would ask the same question again if fails)
                    n → abort, remove corrupted appimage
   no  → catalog/user config allows skip?
