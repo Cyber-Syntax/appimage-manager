@@ -33,9 +33,12 @@ def init_config() -> None:
         CACHE_DIR,
         BACKUP_DIR,
     ):
-        was_missing = not dirs.exists()
-        logger.debug("Creating directory: %s", dirs)
         try:
+            # Check if the directory exists before attempting to create it.
+            # Keep it inside try to catch PermissionError from Path.exists()
+            was_missing = not dirs.exists()
+            logger.debug("Creating directory: %s", dirs)
+
             # NOTE:
             # parents: make it create parent dirs like if ~/.config parent
             # not exist when ~/.config/appman/, than it create config, appman
