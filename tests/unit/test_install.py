@@ -253,7 +253,7 @@ async def test_install_one_success_returns_repo_and_tag(
         patch(
             "appman.install.move_verified_appimage",
             return_value=Path(
-                "/home/test/.local/share/appman/appimages/QOwnNotes.AppImage"
+                "/home/test/.local/share/appman/appimages/pbek/QOwnNotes.AppImage"
             ),
         ) as mock_move,
     ):
@@ -273,7 +273,7 @@ async def test_install_one_success_returns_repo_and_tag(
     mock_select.assert_called_once_with(sample_release.assets, "QOwnNotes")
     mock_download.assert_awaited_once()
     mock_move.assert_called_once_with(
-        "/fake/path/QOwnNotes.AppImage", "QOwnNotes"
+        "/fake/path/QOwnNotes.AppImage", "pbek", "QOwnNotes"
     )
 
 
@@ -565,6 +565,7 @@ async def test_install_one_returns_error_when_move_fails(
     assert outcome is move_error
     mock_move.assert_called_once_with(
         "/fake/path/QOwnNotes.AppImage",
+        "pbek",
         "QOwnNotes",
     )
 
