@@ -7,6 +7,7 @@ own control flow is what's under test.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -244,11 +245,17 @@ async def test_install_one_success_returns_repo_and_tag(
             "appman.install.download_and_verify",
             new_callable=AsyncMock,
             return_value=(
-                "/fake/path/MyApp.AppImage",
+                "/fake/path/QOwnNotes.AppImage",
                 ChecksumResult(status=VerificationStatus.VERIFIED),
                 [],
             ),
         ) as mock_download,
+        patch(
+            "appman.install.move_verified_appimage",
+            return_value=Path(
+                "/home/test/.local/share/appman/appimages/QOwnNotes.AppImage"
+            ),
+        ) as mock_move,
     ):
         package, outcome = await _install_one(fake_session, url)
 
@@ -265,6 +272,9 @@ async def test_install_one_success_returns_repo_and_tag(
     )
     mock_select.assert_called_once_with(sample_release.assets, "QOwnNotes")
     mock_download.assert_awaited_once()
+    mock_move.assert_called_once_with(
+        "/fake/path/QOwnNotes.AppImage", "QOwnNotes"
+    )
 
 
 @pytest.mark.asyncio
@@ -305,6 +315,10 @@ async def test_install_one_prints_download_warnings_but_still_succeeds(
             ),
         ),
         patch("appman.install._print_package_warning") as mock_print_warn,
+        patch(
+            "appman.install.move_verified_appimage",
+            return_value=Path("/fake/path/QOwnNotes.AppImage"),
+        ),
     ):
         package, outcome = await _install_one(
             fake_session, "https://github.com/pbek/QOwnNotes"
@@ -451,6 +465,62 @@ async def test_install_one_returns_error_when_download_fails(
         )
 
     assert outcome is download_error
+
+
+@pytest.mark.asyncio
+async def test_install_one_returns_error_when_move_fails(
+    fake_session: MagicMock,
+    sample_release: GitHubRelease,
+    sample_selected: SelectedAssets,
+) -> None:
+    """A move failure propagates as the final outcome."""
+    move_error = PackageError(
+        package="QOwnNotes",
+        kind=ErrorKind.FILESYSTEM,
+        code=ErrorCode.FILESYSTEM_MOVE_ERROR,
+        stage=Stage.INSTALL.value,
+        retryable=False,
+    )
+
+    with (
+        patch(
+            "appman.install.parse_github_url",
+            return_value=("pbek", "QOwnNotes"),
+        ),
+        patch(
+            "appman.install.fetch_latest_release",
+            new_callable=AsyncMock,
+            return_value=sample_release,
+        ),
+        patch(
+            "appman.install.select_appimage_asset",
+            return_value=sample_selected,
+        ),
+        patch(
+            "appman.install.download_and_verify",
+            new_callable=AsyncMock,
+            return_value=(
+                "/fake/path/QOwnNotes.AppImage",
+                ChecksumResult(status=VerificationStatus.VERIFIED),
+                [],
+            ),
+        ),
+        patch(
+            "appman.install.move_verified_appimage",
+            return_value=move_error,
+        ) as mock_move,
+    ):
+        package, outcome = await _install_one(
+            fake_session,
+            "https://github.com/pbek/QOwnNotes",
+        )
+
+    assert package == "QOwnNotes"
+    assert outcome is move_error
+    mock_move.assert_called_once_with(
+        "/fake/path/QOwnNotes.AppImage",
+        "QOwnNotes",
+    )
 
 
 @pytest.mark.asyncio
