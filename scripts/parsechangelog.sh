@@ -4,7 +4,8 @@
 # DESCRIPTION: Extract version and release notes from CHANGELOG.md
 # USAGE: Used by github actions to receive release notes and tag for releasing
 # LICENSE: GPLv3
-# DATE: 2026-07-01
+# AUTHOR: Cyber-Syntax
+# DATE: 2026-09-04
 
 #######################################
 # -e: exit script if any command has non-zero exit status
