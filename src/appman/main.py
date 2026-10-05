@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     """Run the cli application."""
-    # NOTE: init_config() and init_log() are called after parse_args() because
+    # NOTE: config and logging setup run after parse_args() because
     # --version and --help are handled by argparse before any subcommand is invoked.
+    # before any subcommand is invoked.
 
     # build the whole parser tree...
     parser = create_parser()
