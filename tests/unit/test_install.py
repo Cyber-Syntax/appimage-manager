@@ -278,6 +278,52 @@ async def test_install_one_success_returns_repo_and_tag(
 
 
 @pytest.mark.asyncio
+async def test_install_one_blocks_checksum_mismatch(
+    fake_session: MagicMock,
+    sample_release: GitHubRelease,
+    sample_selected: SelectedAssets,
+) -> None:
+    """A failed checksum must prevent the AppImage from being installed."""
+    with (
+        patch(
+            "appman.install.parse_github_url",
+            return_value=("pbek", "QOwnNotes"),
+        ),
+        patch(
+            "appman.install.fetch_latest_release",
+            new_callable=AsyncMock,
+            return_value=sample_release,
+        ),
+        patch(
+            "appman.install.select_appimage_asset",
+            return_value=sample_selected,
+        ),
+        patch(
+            "appman.install.download_and_verify",
+            new_callable=AsyncMock,
+            return_value=(
+                "/fake/path/QOwnNotes.AppImage",
+                ChecksumResult(status=VerificationStatus.FAILED),
+                [],
+            ),
+        ),
+        patch("appman.install.move_verified_appimage") as mock_move,
+    ):
+        package, outcome = await _install_one(
+            fake_session,
+            "https://github.com/pbek/QOwnNotes",
+        )
+
+    assert package == "QOwnNotes"
+    assert isinstance(outcome, PackageError)
+    assert outcome.kind is ErrorKind.VERIFICATION
+    assert outcome.code is ErrorCode.CHECKSUM_MISMATCH
+    assert outcome.stage == Stage.VERIFY.value
+    assert outcome.retryable is False
+    mock_move.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_install_one_prints_download_warnings_but_still_succeeds(
     fake_session: MagicMock,
     sample_release: GitHubRelease,
