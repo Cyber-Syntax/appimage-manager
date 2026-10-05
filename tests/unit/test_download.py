@@ -53,6 +53,114 @@ class FakeResponse:
             raise self._error
 
 
+class FailingContent:
+    async def iter_chunked(self, _chunk_size: int):
+        yield b"partial"
+        raise aiohttp.ClientError("Simulated network error during download")
+
+
+@pytest.mark.asyncio
+async def test_download_asset_removes_partial_file_on_stream_error(
+    tmp_path: Path,
+) -> None:
+    asset = SimpleNamespace(
+        name="app.AppImage", download_url="http://example.com/app/desktop"
+    )
+
+    response = FakeResponse()
+    response.content = FailingContent()
+
+    session = MagicMock()
+    session.get.return_value = response
+
+    result = await _download_asset(session, asset, tmp_path, "test-package")
+
+    assert isinstance(result, PackageError)
+    assert result.code == ErrorCode.NETWORK_TIMEOUT
+    assert result.kind == ErrorKind.NETWORK
+    assert result.stage == Stage.DOWNLOAD.value
+    assert result.retryable is True
+
+    # Ensure that the partial file is removed after the download error
+    assert not (tmp_path / "app.AppImage.part").exists()
+
+
+@pytest.mark.asyncio
+async def test_download_asset_returns_permission_error_for_dest_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asset = SimpleNamespace(
+        name="app.AppImage", download_url="http://example.com/app/desktop"
+    )
+
+    def fail_open(*_args: object, **_kwargs: object) -> None:
+        raise PermissionError("permission error")
+
+    monkeypatch.setattr(Path, "open", fail_open)
+
+    session = MagicMock()
+    session.get.return_value = FakeResponse()
+
+    result = await _download_asset(session, asset, tmp_path, "test-package")
+
+    assert isinstance(result, PackageError)
+    assert result.kind == ErrorKind.FILESYSTEM
+    assert result.code == ErrorCode.PERMISSION_DENIED
+    assert result.stage == Stage.DOWNLOAD.value
+
+
+@pytest.mark.asyncio
+async def test_download_asset_ignores_cleanup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asset = SimpleNamespace(
+        name="app.AppImage", download_url="http://example.com/app/desktop"
+    )
+
+    response = FakeResponse()
+    response.content = FailingContent()
+
+    def fail_unlink(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated unlink error")
+
+    monkeypatch.setattr(Path, "unlink", fail_unlink)
+
+    session = MagicMock()
+    session.get.return_value = response
+
+    result = await _download_asset(session, asset, tmp_path, "test-package")
+
+    assert isinstance(result, PackageError)
+    assert result.kind == ErrorKind.NETWORK
+    assert result.code == ErrorCode.NETWORK_TIMEOUT
+    assert result.stage == Stage.DOWNLOAD.value
+
+
+@pytest.mark.asyncio
+async def test_download_asset_returns_filesystem_error_on_write_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asset = SimpleNamespace(
+        name="app.AppImage", download_url="http://example.com/app/desktop"
+    )
+
+    def fail_write(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated write error")
+
+    monkeypatch.setattr(Path, "open", fail_write)
+
+    session = MagicMock()
+    session.get.return_value = FakeResponse()
+
+    result = await _download_asset(session, asset, tmp_path, "test-package")
+
+    assert isinstance(result, PackageError)
+    assert result.kind == ErrorKind.FILESYSTEM
+    assert result.code == ErrorCode.FILESYSTEM_WRITE_ERROR
+    assert result.stage == Stage.DOWNLOAD.value
+    assert result.retryable is False
+
+
 @pytest.mark.asyncio
 async def test_download_asset_writes_file(tmp_path: Path) -> None:
     asset = SimpleNamespace(
