@@ -215,7 +215,7 @@ async def _install_one(
         for warning in warnings:
             _print_package_warning(warning)
 
-        installed_path = move_verified_appimage(appimage_path, package)
+        installed_path = move_verified_appimage(appimage_path, owner, package)
         if isinstance(installed_path, PackageError):
             return package, installed_path
 

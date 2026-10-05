@@ -403,6 +403,7 @@ class ErrorCode(Enum):
     FILESYSTEM_READ_ERROR = "filesystem_read_error"
     FILESYSTEM_DELETE_ERROR = "filesystem_delete_error"
     FILESYSTEM_MOVE_ERROR = "filesystem_move_error"
+    FILESYSTEM_CHMOD_ERROR = "filesystem_chmod_error"
     UNKNOWN_ERROR = "unknown_error"
 
 
@@ -448,6 +449,7 @@ ERROR_MESSAGES: dict[ErrorCode, str] = {
     ErrorCode.FILESYSTEM_READ_ERROR: "failed to read from the filesystem",
     ErrorCode.FILESYSTEM_DELETE_ERROR: "failed to delete from the filesystem",
     ErrorCode.FILESYSTEM_MOVE_ERROR: "failed to move file on the filesystem",
+    ErrorCode.FILESYSTEM_CHMOD_ERROR: "failed to change file permissions",
     ErrorCode.UNKNOWN_ERROR: "an unknown error occurred",
 }
 
