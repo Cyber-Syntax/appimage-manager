@@ -32,6 +32,7 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+# TODO: add yml verification support to verify.py
 _CHECKSUM_EXTENSIONS = (
     ".sha256sum",
     ".sha256",
@@ -401,7 +402,7 @@ def _select_matching_checksum_file(
     Real-world checksum files come in two shapes:
       1. Per-file: named after the AppImage itself, e.g.
             if c.name.lower().startswith(appimage.name.lower() + ".")
-         "QOwnNotes-x86_64.AppImage" — matched by prefix.
+         "QOwnNotes-x86_64.AppImage.sha256" — matched by prefix.
       2. Release-wide manifests covering every asset in the release, e.g.
          "SHA256SUMS" or "latest-linux.yml" — used only as a fallback
          when no per-file match exists.
