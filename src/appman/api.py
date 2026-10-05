@@ -53,7 +53,6 @@ _CHECKSUM_EXACT_NAMES = frozenset(
         "checksums.txt",
     }
 )
-
 # Release-wide manifests that verify every asset in the release rather than
 # one specific file (e.g. electron-builder's latest-linux.yml, or a single
 # SHA256SUMS covering all binaries). Used as a fallback when no per-file
@@ -402,7 +401,7 @@ def _select_matching_checksum_file(
     Real-world checksum files come in two shapes:
       1. Per-file: named after the AppImage itself, e.g.
             if c.name.lower().startswith(appimage.name.lower() + ".")
-         "QOwnNotes-x86_64.AppImage.sha256" — matched by prefix.
+         "QOwnNotes-x86_64.AppImage.sha256sum" — matched by prefix.
       2. Release-wide manifests covering every asset in the release, e.g.
          "SHA256SUMS" or "latest-linux.yml" — used only as a fallback
          when no per-file match exists.

@@ -10,6 +10,7 @@ import aiohttp
 from .api import fetch_latest_release, parse_github_url, select_appimage_asset
 from .constants import DOWNLOADS_DIR
 from .download import download_and_verify
+from .file import move_verified_appimage
 from .models import (
     ERROR_MESSAGES,
     INFO_MESSAGES,
@@ -199,6 +200,12 @@ async def _install_one(
         for warning in warnings:
             _print_package_warning(warning)
 
+        installed_path = move_verified_appimage(appimage_path, package)
+        if isinstance(installed_path, PackageError):
+            return package, installed_path
+
+        logger.debug("Installed AppImage to: %s", installed_path)
+
     except Exception:
         # last-resort boundary guard — an unexpected exception (e.g. a
         # malformed API payload raising KeyError during parsing) must not
@@ -302,8 +309,8 @@ def install(urls: list[str]) -> None:
     logger.info("%s", INFO_MESSAGES[InfoCode.CREATING_TRANSACTION_SUMMARY])
     for name, version in installed:
         logger.info("INSTALLED %s %s", name, version)
-    for name, _ in failed:
-        logger.error("FAILED %s", name)
+    for _, error in failed:
+        _print_package_error(error)
     logger.info("%s", INFO_MESSAGES[InfoCode.DONE])
 
     logger.debug(
