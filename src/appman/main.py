@@ -7,7 +7,7 @@ import sys
 
 from .cli import create_parser, parse_args
 from .config import init_config
-from .logger import init_log
+from .logger import init_console_log, init_file_log
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +22,14 @@ def main() -> None:
     # parse the arguments like install, URLs
     args = parse_args(parser)
 
-    # mkdir xdg config locations
+    # initialize console logging first, so that any errors during
+    # config initialization are logged to the console.
+    init_console_log()
+    # mkdir xdg config dirs(e.g log dir, cache dir, etc) if not exist
     init_config()
-    # init file and console logger
-    init_log()
+    # attach the rotating file handler after LOG_DIR exists
+    init_file_log()
+
     logger.debug("Starting appman...")
 
     # when `appman install` passed, hasattr is True because
