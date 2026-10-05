@@ -221,6 +221,7 @@ async def fetch_latest_release(
         except aiohttp.ClientResponseError as exc:
             is_rate_limited = (
                 exc.status == 403
+                and exc.headers is not None
                 and exc.headers.get("X-RateLimit-Remaining") == "0"
             )
             retryable = is_rate_limited or exc.status >= 500
