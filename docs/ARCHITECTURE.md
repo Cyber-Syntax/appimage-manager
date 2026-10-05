@@ -432,7 +432,7 @@ class ErrorKind(Enum):
     NETWORK = "network"
     ASSET = "asset"
     VERIFICATION = "verification"
-    PERMISSION = "permission"
+    FILESYSTEM = "filesystem"
     INTERNAL = "internal"
 
 class ErrorCode(Enum):
