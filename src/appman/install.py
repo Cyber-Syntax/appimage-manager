@@ -8,7 +8,7 @@ import logging
 import aiohttp
 
 from .api import fetch_latest_release, parse_github_url, select_appimage_asset
-from .constants import APPIMAGES_DIR
+from .constants import DOWNLOADS_DIR
 from .download import download_and_verify
 from .models import (
     ERROR_MESSAGES,
@@ -179,6 +179,8 @@ async def _install_one(
             selected.appimage.name,
         )
 
+        download_dir = DOWNLOADS_DIR / owner / repo
+
         # NOTE: downloads + verification for this one package. Internally this
         # function does it's own concurrency (see download.py),
         # but here mean "wait for this whole step to finish"
@@ -186,9 +188,7 @@ async def _install_one(
             session=session,
             package=package,
             selected=selected,
-            # TODO: refactor destination to download dir like a cache path
-            # use file_ops.py module to move verified to APPIMAGES_DIR
-            dest_dir=APPIMAGES_DIR,
+            dest_dir=download_dir,
         )
         if isinstance(result, PackageError):
             return package, result

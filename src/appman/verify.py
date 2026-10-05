@@ -17,6 +17,9 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+# TODO: add yml support
+# TODO: add PARTIAL_VERIFIED support (e.g. digest verified but checksum file failed or other way around)
+
 # Matches standard `sha256sum`/`shasum`-style output lines:
 #   <64-hex-char-hash>  <filename>
 #   <64-hex-char-hash> *<filename>      (asterisk = binary mode marker)

@@ -16,6 +16,7 @@ APPIMAGES_DIR = DATA_DIR / "appimages"
 CATALOG_DIR = DATA_DIR / "catalog"
 # XDG_CACHE_HOME: $HOME/.cache
 CACHE_DIR = Path.home() / ".cache" / "appman"
+DOWNLOADS_DIR = CACHE_DIR / "downloads"
 
 # kept well under the 60 req/hr unauthenticated
 # this is separate from DOWNLOAD_SEMAPHORE

@@ -130,6 +130,14 @@ async def _download_asset(
                         stage=Stage.DOWNLOAD.value,
                         retryable=False,
                     )
+                except aiohttp.ClientError:
+                    return PackageError(
+                        package=package,
+                        kind=ErrorKind.NETWORK,
+                        code=ErrorCode.NETWORK_TIMEOUT,
+                        stage=Stage.DOWNLOAD.value,
+                        retryable=True,
+                    )
                 except OSError:
                     logger.exception(
                         "Failed to write downloaded asset to disk: %s",
@@ -173,6 +181,8 @@ async def _download_asset(
 
 
 # TODO: we might change checksum install seperate function?
+# TODO: after verification result accepted, move it to APPIMAGES_DIR in file.py
+# also support PARTIAL_VERIFIED once implemented and handle SKIPPED and MISSING
 async def download_and_verify(
     session: aiohttp.ClientSession,
     package: str,

@@ -11,6 +11,7 @@ from .constants import (
     CATALOG_DIR,
     CONFIG_DIR,
     DATA_DIR,
+    DOWNLOADS_DIR,
     LOG_DIR,
 )
 
@@ -32,6 +33,7 @@ def init_config() -> None:
         CATALOG_DIR,
         CACHE_DIR,
         BACKUP_DIR,
+        DOWNLOADS_DIR,
     ):
         try:
             # Check if the directory exists before attempting to create it.
