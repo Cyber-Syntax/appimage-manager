@@ -33,4 +33,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - File and stderr logging with rotating log files.
 - Move verified appimages to persistent dir
 
-[0.1.0-alpha]: https://github.com/your/project/compare/v0.1.0-alpha...HEAD
+[0.1.0-alpha]: https://github.com/Cyber-Syntax/appimage-manager/compare/v0.1.0-alpha...HEAD
