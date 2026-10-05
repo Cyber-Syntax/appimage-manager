@@ -82,29 +82,77 @@ async def _download_asset(
                     response.status,
                     response.headers.get("Content-Length"),
                 )
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
-                tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
-                logger.debug("Creating temporary file: %s", tmp_path)
-                with tmp_path.open("wb") as fh:
-                    logger.debug(
-                        "Downloading asset to temporary file: %s", tmp_path
+
+                tmp_path: Path | None = None
+                download_completed = False
+
+                try:
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+                    tmp_path = dest_path.with_suffix(
+                        dest_path.suffix + ".part"
                     )
-                    # this is an "async generator" loop. Instead of
-                    # await response.read() (which waits for the whole file
-                    # to be downloaded), this hands you 256kB chunks as they
-                    # arrives over the network, pausing this task between chunks.
-                    # That's why an AppImage never has to sit fully in memory,
-                    # each chunk is written to disk and then thrown away.
-                    async for chunk in response.content.iter_chunked(
-                        CHUNK_SIZE
-                    ):
-                        # writing to a local file is fast so using synchronous
-                        _ = fh.write(chunk)
+                    logger.debug("Creating temporary file: %s", tmp_path)
+
+                    with tmp_path.open("wb") as fh:
+                        logger.debug(
+                            "Downloading asset to temporary file: %s", tmp_path
+                        )
+                        # this is an "async generator" loop. Instead of
+                        # await response.read() (which waits for the whole file
+                        # to be downloaded), this hands you 256kB chunks as they
+                        # arrives over the network, pausing this task between chunks.
+                        # That's why an AppImage never has to sit fully in memory,
+                        # each chunk is written to disk and then thrown away.
+                        async for chunk in response.content.iter_chunked(
+                            CHUNK_SIZE
+                        ):
+                            # writing to a local file is fast so using synchronous
+                            _ = fh.write(chunk)
+
+                    # NOTE: used outside of with block so the file is closed
+                    # before final rename.
                     # rename the temporary file to the final destination path
                     _ = tmp_path.replace(dest_path)
                     logger.debug(
-                        "Download complete, moved to final path: %s", dest_path
+                        "Download complete, moved to final path: %s",
+                        dest_path,
                     )
+                    download_completed = True
+                except PermissionError:
+                    logger.exception(
+                        "Permission denied when writing downloaded asset to disk: %s",
+                        dest_path,
+                    )
+                    return PackageError(
+                        package=package,
+                        kind=ErrorKind.FILESYSTEM,
+                        code=ErrorCode.PERMISSION_DENIED,
+                        stage=Stage.DOWNLOAD.value,
+                        retryable=False,
+                    )
+                except OSError:
+                    logger.exception(
+                        "Failed to write downloaded asset to disk: %s",
+                        dest_path,
+                    )
+                    return PackageError(
+                        package=package,
+                        kind=ErrorKind.FILESYSTEM,
+                        code=ErrorCode.FILESYSTEM_WRITE_ERROR,
+                        stage=Stage.DOWNLOAD.value,
+                        retryable=False,
+                    )
+                finally:
+                    if not download_completed and tmp_path is not None:
+                        try:
+                            _ = tmp_path.unlink(missing_ok=True)
+                            logger.debug(
+                                "Deleted temporary file: %s", tmp_path
+                            )
+                        except OSError:
+                            logger.warning(
+                                "Failed to delete temporary file: %s", tmp_path
+                            )
         except aiohttp.ClientConnectorError:
             return PackageError(
                 package=package,

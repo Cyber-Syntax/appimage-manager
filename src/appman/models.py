@@ -360,17 +360,17 @@ class ErrorKind(Enum):
         NETWORK: network-related errors (timeouts, DNS failures)
         ASSET: asset-related errors (missing, malformed, etc.)
         VERIFICATION: verification-related errors (checksum mismatches, etc.)
-        PERMISSION: permission-related errors (file system, access denied)
         INTERNAL: internal errors (unexpected exceptions, logic errors)
         VALIDATION: validation errors (invalid input, unsupported URLs)
+        FILESYSTEM: file system errors (read/write/move/delete failures)
     """
 
     NETWORK = "network"
     ASSET = "asset"
     VERIFICATION = "verification"
-    PERMISSION = "permission"
     INTERNAL = "internal"
     VALIDATION = "validation"
+    FILESYSTEM = "filesystem"
 
 
 class ErrorCode(Enum):
@@ -384,6 +384,10 @@ class ErrorCode(Enum):
         PERMISSION_DENIED: permission denied when accessing a file or directory
         INVALID_URL: the provided repository URL is invalid or unsupported
         UNKNOWN_ERROR: an unknown error occurred
+        FILESYSTEM_WRITE_ERROR: an error occurred while writing to the file system
+        FILESYSTEM_READ_ERROR: an error occurred while reading from the file system
+        FILESYSTEM_DELETE_ERROR: an error occurred while deleting a file or directory
+        FILESYSTEM_MOVE_ERROR: an error occurred while moving a file or directory
     """
 
     APPIMAGE_ASSET_NOT_FOUND = "appimage_asset_not_found"
@@ -395,6 +399,10 @@ class ErrorCode(Enum):
     PERMISSION_DENIED = "permission_denied"
     INVALID_URL = "invalid_url"
     MALFORMED_RESPONSE = "malformed_response"
+    FILESYSTEM_WRITE_ERROR = "filesystem_write_error"
+    FILESYSTEM_READ_ERROR = "filesystem_read_error"
+    FILESYSTEM_DELETE_ERROR = "filesystem_delete_error"
+    FILESYSTEM_MOVE_ERROR = "filesystem_move_error"
     UNKNOWN_ERROR = "unknown_error"
 
 
@@ -436,6 +444,10 @@ ERROR_MESSAGES: dict[ErrorCode, str] = {
         "Example: https://github.com/pbek/QOwnNotes"
     ),
     ErrorCode.MALFORMED_RESPONSE: "Malformed release payload",
+    ErrorCode.FILESYSTEM_WRITE_ERROR: "failed to write to the filesystem",
+    ErrorCode.FILESYSTEM_READ_ERROR: "failed to read from the filesystem",
+    ErrorCode.FILESYSTEM_DELETE_ERROR: "failed to delete from the filesystem",
+    ErrorCode.FILESYSTEM_MOVE_ERROR: "failed to move file on the filesystem",
     ErrorCode.UNKNOWN_ERROR: "an unknown error occurred",
 }
 
