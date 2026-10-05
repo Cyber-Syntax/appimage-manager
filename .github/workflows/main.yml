@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -30,9 +30,9 @@ jobs:
             exit 1
           fi
 
-          if ! grep -q "^## \[" CHANGELOG.md && ! grep -q "^## v" CHANGELOG.md; then
+          if ! grep -q "^## \[" CHANGELOG.md; then
             echo "::error::CHANGELOG.md does not contain valid version headers"
-            echo "::error::Expected format: '## [X.Y.Z]' or '## vX.Y.Z'"
+            echo "::error::Expected format: '## [X.Y.Z]'"
             exit 1
           fi
 
@@ -42,11 +42,12 @@ jobs:
 
       - name: Validate semantic version
         if: steps.changelog.outputs.is_unreleased != 'true'
+        env:
+          CHANGELOG_VERSION: ${{ steps.changelog.outputs.version }}
         run: |
-          VERSION="${{ steps.changelog.outputs.version }}"
-          VERSION=${VERSION#v}
+          VERSION="${CHANGELOG_VERSION#v}"
 
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; then
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
             echo "::error::Version '$VERSION' does not follow semantic versioning"
             echo "::error::Expected format: MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]"
             exit 1
@@ -56,10 +57,11 @@ jobs:
 
       - name: Validate tag matches changelog version
         if: steps.changelog.outputs.is_unreleased != 'true'
+        env:
+          CHANGELOG_VERSION: ${{ steps.changelog.outputs.version }}
         run: |
           TAG_NAME="${GITHUB_REF_NAME}"
           TAG_VERSION="${TAG_NAME#v}"
-          CHANGELOG_VERSION="${{ steps.changelog.outputs.version }}"
           CHANGELOG_VERSION="${CHANGELOG_VERSION#v}"
 
           if [[ "$TAG_VERSION" != "$CHANGELOG_VERSION" ]]; then
