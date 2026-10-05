@@ -46,7 +46,8 @@ def test_main_dispatches_to_args_func_when_present(
 
     with (
         patch("appman.main.init_config") as mock_init_config,
-        patch("appman.main.init_log") as mock_init_log,
+        patch("appman.main.init_console_log") as mock_init_console_log,
+        patch("appman.main.init_file_log") as mock_init_file_log,
         patch("appman.main.create_parser", return_value=fake_parser),
         patch(
             "appman.main.parse_args", return_value=fake_args
@@ -59,7 +60,8 @@ def test_main_dispatches_to_args_func_when_present(
     # currently, we call it without it which that's why it is used instead
     # of assert_called_once() which that isn't check without arg.
     mock_init_config.assert_called_once_with()
-    mock_init_log.assert_called_once_with()
+    mock_init_console_log.assert_called_once_with()
+    mock_init_file_log.assert_called_once_with()
     mock_parse_args.assert_called_once_with(fake_parser)
     mock_func.assert_called_once_with(fake_args)
     mock_exit.assert_not_called()
@@ -80,19 +82,21 @@ def test_main_runs_setup_before_parsing_before_dispatch(
     manager.parse_args.return_value = fake_args
 
     with (
+        patch("appman.main.init_console_log", manager.init_console_log),
         patch("appman.main.init_config", manager.init_config),
-        patch("appman.main.init_log", manager.init_log),
+        patch("appman.main.init_file_log", manager.init_file_log),
         patch("appman.main.create_parser", manager.create_parser),
         patch("appman.main.parse_args", manager.parse_args),
     ):
         main()
 
     # testing that all those func called in order from top to bottom
-    assert manager.mock_calls[:4] == [
-        call.init_config(),
-        call.init_log(),
+    assert manager.mock_calls[:5] == [
         call.create_parser(),
         call.parse_args(fake_parser),
+        call.init_console_log(),
+        call.init_config(),
+        call.init_file_log(),
     ]
 
 
@@ -110,11 +114,12 @@ def test_main_exits_1_and_prints_help_when_no_func(
 
     with (
         patch("appman.main.init_config") as mock_init_config,
-        patch("appman.main.init_log") as mock_init_log,
+        patch("appman.main.init_console_log") as mock_init_console_log,
+        patch("appman.main.init_file_log") as mock_init_file_log,
         patch("appman.main.create_parser", return_value=fake_parser),
         patch("appman.main.parse_args", return_value=fake_args),
         caplog.at_level(logging.ERROR, logger="appman.main"),
-        pytest.raises(SystemExit) as exc_info
+        pytest.raises(SystemExit) as exc_info,
     ):
         main()
 
@@ -124,7 +129,8 @@ def test_main_exits_1_and_prints_help_when_no_func(
 
     # both must run even when no subcommand was given
     mock_init_config.assert_called_once()
-    mock_init_log.assert_called_once()
+    mock_init_console_log.assert_called_once()
+    mock_init_file_log.assert_called_once()
 
 
 def test_main_does_not_swallow_init_config_failure() -> None:
@@ -134,15 +140,19 @@ def test_main_does_not_swallow_init_config_failure() -> None:
     crash, not silently continue into parsing with missing directories.
     """
     with (
+        patch("appman.main.init_console_log") as mock_init_console_log,
         patch(
             "appman.main.init_config", side_effect=OSError("permission denied")
         ),
-        patch("appman.main.init_log") as mock_init_log,
-        pytest.raises(OSError, match="permission denied")
+        patch("appman.main.init_file_log") as mock_init_file_log,
+        pytest.raises(OSError, match="permission denied"),
     ):
         main()
 
-    mock_init_log.assert_not_called()  # never reached -- proves short-circuit
+    # console_log now init before config init, so it should be called even when config fails
+    # with the new order, config errors would be shown to the user
+    mock_init_console_log.assert_called_once_with()
+    mock_init_file_log.assert_not_called()  # never reached -- proves short-circuit
 
 
 def test_main_does_not_swallow_dispatched_command_failure(
@@ -158,7 +168,8 @@ def test_main_does_not_swallow_dispatched_command_failure(
 
     with (
         patch("appman.main.init_config"),
-        patch("appman.main.init_log"),
+        patch("appman.main.init_console_log"),
+        patch("appman.main.init_file_log"),
         patch("appman.main.create_parser", return_value=fake_parser),
         patch("appman.main.parse_args", return_value=fake_args),
         pytest.raises(SystemExit) as exc_info,

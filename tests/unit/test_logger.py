@@ -9,12 +9,31 @@ from unittest.mock import patch
 
 import pytest
 
-from appman.logger import init_log
+from appman.logger import init_console_log, init_file_log
+
+
+@pytest.fixture
+def configured_logger(log_file, clean_appman_logger: Logger) -> Logger:
+    """Fixture to provide a logger configured with console and file handlers.
+
+    Args:
+        log_file: Temporary log file path.
+        clean_appman_logger: Cleaned 'appman' logger fixture.
+
+    Returns:
+        Configured 'appman' logger.
+    """
+    init_console_log()
+    init_file_log()
+    return clean_appman_logger
 
 
 @pytest.fixture(autouse=True)
 def clean_appman_logger() -> Generator[Logger, None, None]:
     """Reset the 'appman' logger's handlers before and after each test.
+
+    This ensures that each test starts with a clean logger state, preventing
+    any interference between tests.
 
     The logger is a module-level singleton, so tests must not leak
     handlers into one another (independence requirement).
@@ -99,58 +118,95 @@ def _console_handler(logger: logging.Logger) -> StreamHandler[Any]:
     )
 
 
-def test_init_log_attaches_exactly_two_handlers(log_file, clean_appman_logger):
+def test_init_log_attaches_exactly_two_handlers(configured_logger):
     """Exactly one file handler and one console handler are attached.
 
     Args:
-        log_file:
-        clean_appman_logger:
+        configured_logger: Logger with console and file handlers.
     """
-    init_log()
+    init_console_log()
+    init_file_log()
 
-    assert len(clean_appman_logger.handlers) == 2
+    assert len(configured_logger.handlers) == 2
 
 
-def test_init_log_file_handler_is_rotating(log_file, clean_appman_logger):
+def test_init_log_file_handler_is_rotating(configured_logger):
     """The file handler is a RotatingFileHandler, not a plain FileHandler."""
-    init_log()
+    init_console_log()
+    init_file_log()
 
-    assert isinstance(_file_handler(clean_appman_logger), RotatingFileHandler)
+    assert isinstance(_file_handler(configured_logger), RotatingFileHandler)
 
 
 def test_init_log_file_handler_uses_configured_rotation_limits(
-    log_file, clean_appman_logger
+    configured_logger,
 ):
     """Rotating is capped at 1MB with 5 backups, per the module's documented contract."""
-    init_log()
+    init_console_log()
+    init_file_log()
 
-    fh = _file_handler(clean_appman_logger)
+    fh = _file_handler(configured_logger)
     assert fh.maxBytes == 1_000_000
     assert fh.backupCount == 5
 
 
-def test_init_log_file_handler_captures_debug_level(
-    log_file, clean_appman_logger
-):
+def test_init_log_file_handler_captures_debug_level(configured_logger):
     """The file handler is set to DEBUG so it captures everything."""
-    init_log()
+    init_console_log()
+    init_file_log()
 
-    assert _file_handler(clean_appman_logger).level == logging.DEBUG
+    assert _file_handler(configured_logger).level == logging.DEBUG
 
 
-def test_init_log_console_handler_only_shows_info_and_above(
-    log_file, clean_appman_logger
-):
+def test_init_log_console_handler_only_shows_info_and_above(configured_logger):
     """The console handler is set to INFO so DEBUG noise stays out of the terminal."""
-    init_log()
+    init_console_log()
+    init_file_log()
 
-    assert _console_handler(clean_appman_logger).level == logging.INFO
+    assert _console_handler(configured_logger).level == logging.INFO
 
 
 def test_init_log_creates_log_file_at_configured_path(
-    log_file, clean_appman_logger
+    log_file, configured_logger
 ):
     """init_log() eageryl opens the log file at the patched LOG_FILE path."""
-    init_log()
+    init_console_log()
+    init_file_log()
 
     assert log_file.exists()
+
+
+def test_init_console_log_is_idempotent(
+    clean_appman_logger: Logger,
+) -> None:
+    init_console_log()
+    init_console_log()
+
+    console_handlers = [
+        handler
+        for handler in clean_appman_logger.handlers
+        if isinstance(handler, StreamHandler)
+        and not isinstance(handler, RotatingFileHandler)
+    ]
+
+    assert len(console_handlers) == 1
+
+
+def test_init_file_log_is_idempotent(
+    log_file,
+    clean_appman_logger: Logger,
+) -> None:
+    init_file_log()
+    first_handler = _file_handler(clean_appman_logger)
+
+    init_file_log()
+
+    file_handlers = [
+        handler
+        for handler in clean_appman_logger.handlers
+        if isinstance(handler, RotatingFileHandler)
+    ]
+
+    assert len(file_handlers) == 1
+    assert file_handlers[0] is not first_handler
+    assert first_handler.stream is None
