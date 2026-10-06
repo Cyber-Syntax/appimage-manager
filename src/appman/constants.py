@@ -1,6 +1,5 @@
 """Constants for appman."""
 
-import asyncio
 from pathlib import Path
 
 # XDG_CONFIG_HOME: $HOME/.config
@@ -18,19 +17,6 @@ CATALOG_DIR = DATA_DIR / "catalog"
 CACHE_DIR = Path.home() / ".cache" / "appman"
 DOWNLOADS_DIR = CACHE_DIR / "downloads"
 
-# kept well under the 60 req/hr unauthenticated
-# this is separate from DOWNLOAD_SEMAPHORE
-# asset download use direct url and never count against this limit.
-API_CONCURRENCY = 50
-API_SEMAPHORE = asyncio.Semaphore(API_CONCURRENCY)
-
-# bounded concurrency
-# downloads use github website download url and never touch the rest api
-# so this semaphore is independent of API_SEMAPHORE
-#
-# github devs recommend max 20 for concurrent downloads
-DOWNLOAD_CONCURRENCY = 20
-DOWNLOAD_SEMAPHORE = asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
 
 # 256 KiB, streamed, never buffer a whole AppImage in memory
 CHUNK_SIZE = 1024 * 256
@@ -46,7 +32,6 @@ UNSTABLE_VERSION_KEYWORDS = (
     "rc",
     "pre",
     "dev",
-    "test",
     "nightly",
 )
 
@@ -57,7 +42,9 @@ INCOMPATIBLE_PLATFORM_PATTERNS = [
     r"(?i)legacy.*win",
     r"(?i)portable.*win",
     # macOS patterns
-    r"(?i)mac(?!ro)",
+    # WRONG: `r"(?i)mac(?!ro)",` because it would match emacs-x86_64.AppImage
+    # The following patterns are more precise and avoid false positives:
+    r"(?i)(?:^|[-_.])mac(?:os)?(?:[-_.]|$)",
     r"(?i)darwin",
     r"(?i)osx",
     r"(?i)(?:^|[-_.])apple(?:[-_.]|$)",

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import aiohttp
 
-from .constants import CHUNK_SIZE, DOWNLOAD_SEMAPHORE, HTTP_404
+from .constants import CHUNK_SIZE, HTTP_404
 from .models import (
     Asset,
     ChecksumResult,
@@ -21,6 +21,7 @@ from .models import (
     Stage,
     WarningCode,
 )
+from .util import get_concurrency_limits
 from .verify import verify_downloaded_appimage
 
 if TYPE_CHECKING:
@@ -58,7 +59,7 @@ async def _download_asset(
     logger.debug("Downloading asset: %s to %s", asset.download_url, dest_path)
 
     # Use a semaphore to limit concurrent downloads
-    async with DOWNLOAD_SEMAPHORE:
+    async with get_concurrency_limits().download:
         try:
             # same patterns as api.py: session.get() doesn't fetch anything by
             # itself. entering this sends the GET request and pauses until

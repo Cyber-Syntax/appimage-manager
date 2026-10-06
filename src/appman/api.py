@@ -9,7 +9,6 @@ import aiohttp
 import orjson
 
 from .constants import (
-    API_SEMAPHORE,
     CACHE_DIR,
     HTTP_404,
     INCOMPATIBLE_PLATFORM_EXTENSIONS,
@@ -29,6 +28,7 @@ from .models import (
     SelectedAssets,
     Stage,
 )
+from .util import get_concurrency_limits
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ async def fetch_latest_release(
     url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
 
     # Use a semaphore to limit concurrent API requests because of rate limits.
-    async with API_SEMAPHORE:
+    async with get_concurrency_limits().api:
         try:
             # NOTE: session.get() doesn't fetch anything by itself
             # enterin "async with" is what actually send the request

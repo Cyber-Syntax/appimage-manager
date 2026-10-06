@@ -247,10 +247,6 @@ async def _install_all_async(
 ) -> list[tuple[str, str | PackageError]]:
     """Run the install flow for multiple GitHub repository URLs concurrently.
 
-    A signle shared session is used for the whole batch and actual
-    concurrency is still bounded by API_SEMAPHORE and DOWNLOAD_SEMAPHORE,
-    both module-level, so this doesn't bypass those limits.
-
     Args:
         urls: A list of GitHub repository URLs to install from.
 
