@@ -302,7 +302,7 @@ async def test_install_one_blocks_checksum_mismatch(
             "appman.install.download_and_verify",
             new_callable=AsyncMock,
             return_value=(
-                "/fake/path/QOwnNotes.AppImage",
+                Path("/fake/path/QOwnNotes.AppImage"),
                 ChecksumResult(status=VerificationStatus.FAILED),
                 [],
             ),
@@ -320,6 +320,108 @@ async def test_install_one_blocks_checksum_mismatch(
     assert outcome.code is ErrorCode.CHECKSUM_MISMATCH
     assert outcome.stage == Stage.VERIFY.value
     assert outcome.retryable is False
+    mock_move.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_install_one_removes_appimage_on_checksum_mismatch(
+    tmp_path: Path,
+    fake_session: MagicMock,
+    sample_release: GitHubRelease,
+    sample_selected: SelectedAssets,
+) -> None:
+    """A mismatch checksum must delete the downloaded AppImage to avoid
+    leaving a corrupted file in the cache.
+    """
+    appimage_path: Path = tmp_path / "QOwnNotes.AppImage"
+    appimage_path.write_bytes(b"fake content")
+
+    with (
+        patch(
+            "appman.install.parse_github_url",
+            return_value=("pbek", "QOwnNotes"),
+        ),
+        patch(
+            "appman.install.fetch_latest_release",
+            new_callable=AsyncMock,
+            return_value=sample_release,
+        ),
+        patch(
+            "appman.install.select_appimage_asset",
+            return_value=sample_selected,
+        ),
+        patch(
+            "appman.install.download_and_verify",
+            new_callable=AsyncMock,
+            return_value=(
+                appimage_path,
+                ChecksumResult(status=VerificationStatus.FAILED),
+                [],
+            ),
+        ),
+        patch("appman.install.move_verified_appimage") as mock_move,
+    ):
+        package, outcome = await _install_one(
+            fake_session,
+            "https://github.com/pbek/QOwnNotes",
+        )
+
+    assert package == "QOwnNotes"
+    assert isinstance(outcome, PackageError)
+    assert outcome.kind is ErrorKind.VERIFICATION
+    assert outcome.code is ErrorCode.CHECKSUM_MISMATCH
+    assert not appimage_path.exists()  # file must be deleted
+    mock_move.assert_not_called()  # move_verified_appimage must not be called since the checksum failed
+
+
+@pytest.mark.asyncio
+async def test_install_one_logs_when_failed_appimage_cannot_be_deleted(
+    fake_session: MagicMock,
+    sample_release: GitHubRelease,
+    sample_selected: SelectedAssets,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    appimage_path = Path("/fake/path/QOwnNotes.AppImage")
+
+    with (
+        patch(
+            "appman.install.parse_github_url",
+            return_value=("pbek", "QOwnNotes"),
+        ),
+        patch(
+            "appman.install.fetch_latest_release",
+            new_callable=AsyncMock,
+            return_value=sample_release,
+        ),
+        patch(
+            "appman.install.select_appimage_asset",
+            return_value=sample_selected,
+        ),
+        patch(
+            "appman.install.download_and_verify",
+            new_callable=AsyncMock,
+            return_value=(
+                appimage_path,
+                ChecksumResult(status=VerificationStatus.FAILED),
+                [],
+            ),
+        ),
+        patch.object(
+            Path,
+            "unlink",
+            side_effect=OSError("permission denied"),
+        ),
+        patch("appman.install.move_verified_appimage") as mock_move,
+        caplog.at_level(logging.WARNING, logger="appman.install"),
+    ):
+        _, outcome = await _install_one(
+            fake_session,
+            "https://github.com/pbek/QOwnNotes",
+        )
+
+    assert isinstance(outcome, PackageError)
+    assert outcome.code is ErrorCode.CHECKSUM_MISMATCH
+    assert "Failed to delete corrupted AppImage" in caplog.text
     mock_move.assert_not_called()
 
 
