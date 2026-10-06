@@ -204,6 +204,17 @@ async def _install_one(
         # them is not a rare case, and we can still verify the appimage
         # by github digest...
         if verification.status is VerificationStatus.FAILED:
+            try:
+                # TODO: make it user configurable decision in next releases.
+                # delete the corrupted appimage. missing_ok=True is used to
+                # avoid raising an exception if the file doesn't exist
+                appimage_path.unlink(missing_ok=True)
+            except OSError:
+                logger.warning(
+                    "Failed to delete corrupted AppImage: %s",
+                    appimage_path,
+                    exc_info=True,
+                )
             return package, PackageError(
                 package=package,
                 code=ErrorCode.CHECKSUM_MISMATCH,
