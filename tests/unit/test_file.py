@@ -23,7 +23,7 @@ def test_move_verified_appimages_moves_file_to_persistent_dir(
     assert dest.read_bytes() == b"fake content"
     assert not src.exists()  # Ensure the source file has been moved
     # Check if the file is executable (owner, group, others)
-    assert dest.stat().st_mode & 0o111
+    assert dest.stat().st_mode & 0o111 == 0o111
 
 
 def test_move_verified_appimages_returns_permission_error(
@@ -33,7 +33,10 @@ def test_move_verified_appimages_returns_permission_error(
     src.parent.mkdir(parents=True, exist_ok=True)
     src.write_bytes(b"fake content")
 
-    with patch("appman.file.shutil.move", side_effect=PermissionError):
+    with (
+        patch("appman.file.APPIMAGES_DIR", tmp_path / "appimages"),
+        patch("appman.file.shutil.move", side_effect=PermissionError),
+    ):
         result = move_verified_appimage(src, "pbek", "QOwnNotes")
 
     assert isinstance(result, PackageError)
@@ -48,7 +51,10 @@ def test_move_verified_appimage_returns_move_error(tmp_path: Path) -> None:
     src.parent.mkdir(parents=True, exist_ok=True)
     src.write_bytes(b"fake content")
 
-    with patch("appman.file.shutil.move", side_effect=OSError):
+    with (
+        patch("appman.file.APPIMAGES_DIR", tmp_path / "appimages"),
+        patch("appman.file.shutil.move", side_effect=OSError),
+    ):
         result = move_verified_appimage(src, "pbek", "QOwnNotes")
 
     assert isinstance(result, PackageError)
