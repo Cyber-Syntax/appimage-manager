@@ -19,6 +19,7 @@ from .models import (
     PackageWarning,
     SelectedAssets,
     Stage,
+    VerificationStatus,
     WarningCode,
 )
 from .util import get_concurrency_limits
@@ -250,8 +251,8 @@ async def download_and_verify(
             warnings.append(
                 PackageWarning(
                     package=package,
-                    code=WarningCode.NO_CHECKSUM_UNSUPPORTED,
-                    stage=Stage.VERIFY.value,
+                    code=WarningCode.CHECKSUM_DOWNLOAD_FAILED,
+                    stage=Stage.DOWNLOAD.value,
                 )
             )
         else:
@@ -262,5 +263,15 @@ async def download_and_verify(
         appimage_path, selected.appimage, checksum_path
     )
     warnings.extend(verify_warnings)
+
+    # cover unsupported missing checksums
+    if verification.status is VerificationStatus.MISSING and not warnings:
+        warnings.append(
+            PackageWarning(
+                package=package,
+                code=WarningCode.NO_CHECKSUM_UNSUPPORTED,
+                stage=Stage.VERIFY.value,
+            )
+        )
 
     return appimage_path, verification, warnings

@@ -472,6 +472,7 @@ class WarningCode(Enum):
                              skipping verification
         NO_CHECKSUM_UNSUPPORTED: checksum asset not found, some developers
                                  may not provide any
+        CHECKSUM_DOWNLOAD_FAILED: checksum file could not be downloaded
         CHECKSUM_FILE_CORRUPT: checksum file could not be parsed,
                                likely an upstream build-tooling issue,
                                not a verification failure
@@ -480,6 +481,7 @@ class WarningCode(Enum):
 
     NO_CHECKSUM_SKIPPED = "no_checksum_skipped"
     NO_CHECKSUM_UNSUPPORTED = "no_checksum_unsupported"
+    CHECKSUM_DOWNLOAD_FAILED = "checksum_download_failed"
     CHECKSUM_FILE_CORRUPT = "checksum_file_corrupt"
     DUPLICATE_TARGET_SKIPPED = "duplicate_target_skipped"
     UNKNOWN_WARNING = "unknown_warning"
@@ -508,6 +510,10 @@ WARNING_MESSAGES: dict[WarningCode, str] = {
         "checksum asset not found : some developers do not provide any, please "
         "report an issue for the package maintainers if you verified this "
         "isn't appman's fault"
+    ),
+    WarningCode.CHECKSUM_DOWNLOAD_FAILED: (
+        "checksum file could not be downloaded : this is likely an upstream "
+        "build-tooling issue, not a verification failure"
     ),
     WarningCode.CHECKSUM_FILE_CORRUPT: (
         "checksum file could not be parsed : this is likely an upstream "
