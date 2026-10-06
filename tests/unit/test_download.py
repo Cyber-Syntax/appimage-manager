@@ -16,6 +16,7 @@ from appman.models import (
     PackageError,
     PackageWarning,
     Stage,
+    VerificationStatus,
     WarningCode,
 )
 
@@ -143,12 +144,19 @@ async def test_download_asset_returns_filesystem_error_on_write_failure(
     asset = SimpleNamespace(
         name="app.AppImage", download_url="http://example.com/app/desktop"
     )
+    # create magic mock for the file handle returned by Path.open
+    file_handle = MagicMock()
 
-    def fail_write(*_args: object, **_kwargs: object) -> None:
-        raise OSError("simulated write error")
+    # Simulate the context manager behavior of the file handle
+    file_handle.__enter__.return_value = file_handle
 
-    monkeypatch.setattr(Path, "open", fail_write)
+    # Simulate the write method raising an OSError
+    file_handle.write.side_effect = OSError("simulated write error")
 
+    # Patch Path.open to return the mocked file handle
+    monkeypatch.setattr(Path, "open", MagicMock(return_value=file_handle))
+
+    # session.get should return a FakeResponse with some chunks to write
     session = MagicMock()
     session.get.return_value = FakeResponse()
 
@@ -177,7 +185,7 @@ async def test_download_asset_writes_file(tmp_path: Path) -> None:
     assert isinstance(result, DownloadedAsset)
     assert result.path == tmp_path / "app.AppImage"
     assert result.path.read_bytes() == b"appimage"
-    assert not result.path.with_suffix(".part").exists()
+    assert not result.path.with_suffix(result.path.suffix + ".part").exists()
 
 
 @pytest.mark.asyncio
@@ -328,8 +336,48 @@ async def test_download_and_verify_warns_when_checksum_download_fails(
     assert result[1] == verification
     assert len(result[2]) == 1
     assert isinstance(result[2][0], PackageWarning)
-    assert result[2][0].code == WarningCode.NO_CHECKSUM_UNSUPPORTED
+    assert result[2][0].code == WarningCode.CHECKSUM_DOWNLOAD_FAILED
     verify.assert_called_once_with(appimage_path, appimage, None)
+
+
+@pytest.mark.asyncio
+async def test_download_and_verify_warns_when_checksum_file_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    appimage = SimpleNamespace(
+        name="app.AppImage",
+        download_url="http://example.com/app/desktop",
+        digests=None,
+    )
+    appimage_path = tmp_path / appimage.name
+    verification = ChecksumResult(status=VerificationStatus.MISSING)
+
+    with (
+        patch(
+            "appman.download._download_asset",
+            new=AsyncMock(
+                return_value=DownloadedAsset(
+                    asset=appimage, path=appimage_path
+                )
+            ),
+        ),
+        patch(
+            "appman.download.verify_downloaded_appimage",
+            return_value=(verification, []),
+        ) as verify,
+    ):
+        result = await download_and_verify(
+            MagicMock(),
+            "test-package",
+            SimpleNamespace(appimage=appimage, checksum_file=None),
+            tmp_path,
+        )
+
+        assert not isinstance(result, PackageError)
+        assert result[1] is verification
+        assert [warning.code for warning in result[2]] == [
+            WarningCode.NO_CHECKSUM_UNSUPPORTED
+        ]
 
 
 @pytest.mark.asyncio
