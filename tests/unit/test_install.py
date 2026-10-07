@@ -6,6 +6,7 @@ own control flow is what's under test.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -701,26 +702,51 @@ async def test_install_one_survives_malformed_release_payload(
 
 
 @pytest.mark.asyncio
-async def test_install_all_async_one_bad_task_does_not_cancel_others():
-    """A raising task must not cancel sibling in installs via gather()."""
-    urls = ["https://github.com/a/a", "https://github.com/b/b"]
+async def test_install_all_async_propagates_error_without_cancelling_sibling():
+    # create signal shared with the fake sibling task
+    sibling_done = asyncio.Event()
 
+    # store the result of the sibling task
+    sibling_result = None
+
+    # define a fake _install_one that raises KeyError for the first URL and
     async def fake_install_one(session, url):
-        if "a/a" in url:
-            # simulates a bug that slipping install_one own guard
-            raise KeyError("boom")
-        return url, "v1.0.0"
+        # nonlocal allows this inner function to modify the sibling_result
+        # variable from the outer test func.
+        nonlocal sibling_result
 
+        # the first install simulate raises KeyError.
+        # this bypasses _install_one's own error handling and tests
+        # how _install_all_async handles a task that raises unexpectedly.
+        if "a/a" in url:
+            raise KeyError("boom")
+
+        # records its successful result
+        sibling_result = (url, "v1.0.0")
+
+        # signal that it completed
+        sibling_done.set()
+
+        return sibling_result
+
+    # replace the real _install_one with our fake that raises for the first URL
     with patch("appman.install._install_one", side_effect=fake_install_one):
         with pytest.raises(KeyError):
-            # document current unguarded gather() behavior
-            await _install_all_async(urls)
+            await _install_all_async(
+                ["https://github.com/a/a", "https://github.com/b/b"]
+            )
+
+        # wait for the sibling task to complete, with a timeout to avoid hanging
+        await asyncio.wait_for(sibling_done.wait(), timeout=1)
+
+    # verify that the sibling task completed successfully and returned the
+    # expected result, even though the first task raised an exception.
+    assert sibling_result == ("https://github.com/b/b", "v1.0.0")
 
 
 # _install_all_async
 
 
-# TODO: add more detailed comment
 @pytest.mark.asyncio
 async def test_install_all_async_preserves_order_and_uses_shared_session() -> (
     None
