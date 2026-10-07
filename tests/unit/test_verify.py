@@ -256,6 +256,27 @@ def test_parse_latest_linux_yml_skips_malformed_entries():
                     "url": "other.AppImage",
                     "sha512": ELECTRON_SHA512_B64,
                 },
+                {
+                    "url": APPIMAGE_NAME,
+                    "sha512": ELECTRON_SHA512_B64,
+                },
+            ]
+        }
+    )
+
+    assert (
+        _parse_latest_linux_yml(content, APPIMAGE_NAME) == ELECTRON_SHA512_HEX
+    )
+
+
+def test_parse_latest_linux_yml_returns_none_when_target_is_missing():
+    content = yaml.safe_dump(
+        {
+            "files": [
+                {
+                    "url": "other.AppImage",
+                    "sha512": ELECTRON_SHA512_B64,
+                }
             ]
         }
     )
