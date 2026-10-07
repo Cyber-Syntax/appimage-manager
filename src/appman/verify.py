@@ -84,8 +84,15 @@ def _read_checksum_text(path: Path) -> str | None:
     Returns:
         The file's text content, or None if couldn't be read or decoded.
     """
+    MAX_CHECKSUM_FILE_SIZE = 1024 * 1024  # 1 MiB
+
     try:
-        text = path.read_text(encoding="utf-8")
+        with path.open("rb") as fh:
+            content = fh.read(MAX_CHECKSUM_FILE_SIZE + 1)
+            if len(content) > MAX_CHECKSUM_FILE_SIZE:
+                logger.warning("Checksum file is too large (>1 MiB): %s", path)
+                return None
+            text = content.decode("utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         logger.warning("Failed to read checksum file %s: %s", path, exc)
         return None
