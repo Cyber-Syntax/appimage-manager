@@ -233,7 +233,7 @@ def test_unreadable_checksum_file_is_corrupt_warning(
     def raise_read_error(*args: object, **kwargs: object) -> str:
         raise error
 
-    monkeypatch.setattr(Path, "read_text", raise_read_error)
+    monkeypatch.setattr(Path, "open", raise_read_error)
 
     result, warnings = verify_downloaded_appimage(
         appimage,
@@ -256,3 +256,21 @@ def test_parse_checksum_file_does_not_match_suffix_only() -> None:
         )
         is None
     )
+
+
+def test_oversized_checksum_file_is_corrupt_warning(
+    appimage: Path, tmp_path: Path
+) -> None:
+    # Create a checksum file larger than 1 MiB
+    large_content = "a" * (1024 * 1024 + 1)  # 1 MiB + 1 byte
+    checksum_file = write_checksum(tmp_path, large_content)
+
+    result, warnings = verify_downloaded_appimage(
+        appimage,
+        make_asset(),
+        checksum_file,
+    )
+
+    assert result.status is VerificationStatus.MISSING
+    assert len(warnings) == 1
+    assert warnings[0].code is WarningCode.CHECKSUM_FILE_CORRUPT
