@@ -1,12 +1,27 @@
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+import appman.verify as verify_module
 from appman.models import Asset, VerificationStatus, WarningCode
 from appman.verify import _parse_checksum_file, verify_downloaded_appimage
 
 APPIMAGE_NAME = "example.AppImage"
+
+GITHUB_DIGEST = (
+    "27522206c3973efaebfd38f23f0512b4938ae8b1eb2d7a23a9c0af7e957727fa"
+)
+
+DEVELOPER_SHA256 = (
+    "c1ccbe4b9e586e0a7358c0c9d06f08322e3eac953b100e6ab6084253a5e2dbfd"
+)
+
+DEVELOPER_SHA512 = (
+    "712ea8804e5e5a8ff5b1cfb5230dc72dd723fbc9506a8bbccdd0a4a6f5efd08f"
+    "926822b852d87814d9f23a3d29f8c933590f5f6d5fc1ef75eb846b21bfb2983c"
+)
 
 
 @pytest.fixture
@@ -41,6 +56,31 @@ def test_parse_bare_checksum() -> None:
     checksum = "a" * 64
 
     assert _parse_checksum_file(checksum, APPIMAGE_NAME) == checksum
+
+
+def test_parse_bare_checksum_rejects_unexpected_hash_length() -> None:
+    assert _parse_checksum_file("a" * 63, APPIMAGE_NAME) is None
+
+
+def test_parse_checksum_line_rejects_unexpected_hash_length(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_groups() -> tuple[str, str]:
+        return "a" * 63, APPIMAGE_NAME
+
+    def fake_match(_line: str) -> SimpleNamespace:
+        return SimpleNamespace(groups=fake_groups)
+
+    fake_checksum_regex = SimpleNamespace(match=fake_match)
+    monkeypatch.setattr(
+        verify_module,
+        "_CHECKSUM_LINE_RE",
+        fake_checksum_regex,
+    )
+
+    assert (
+        _parse_checksum_file("synthetic checksum line", APPIMAGE_NAME) is None
+    )
 
 
 def test_parse_checksum_file_accepts_binary_marker_and_path() -> None:
@@ -274,3 +314,92 @@ def test_oversized_checksum_file_is_corrupt_warning(
     assert result.status is VerificationStatus.MISSING
     assert len(warnings) == 1
     assert warnings[0].code is WarningCode.CHECKSUM_FILE_CORRUPT
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (DEVELOPER_SHA256, DEVELOPER_SHA256),
+        (DEVELOPER_SHA512, DEVELOPER_SHA512),
+        (f"{DEVELOPER_SHA256}  {APPIMAGE_NAME}", DEVELOPER_SHA256),
+        (f"{DEVELOPER_SHA512}  {APPIMAGE_NAME}", DEVELOPER_SHA512),
+    ],
+)
+def test_parse_developer_checksum_formats(
+    content: str,
+    expected: str,
+) -> None:
+    assert _parse_checksum_file(content, APPIMAGE_NAME) == expected
+
+
+def test_verify_github_digest(
+    appimage: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def return_github_digest(_path: Path) -> str:
+        return GITHUB_DIGEST
+
+    monkeypatch.setattr(
+        "appman.verify._sha256_file",
+        return_github_digest,
+    )
+
+    result, warnings = verify_downloaded_appimage(
+        appimage,
+        make_asset(GITHUB_DIGEST),
+        None,
+    )
+
+    assert result.status is VerificationStatus.VERIFIED
+    assert result.method == "digest"
+    assert warnings == []
+
+
+def test_verify_sha512_checksum_file(
+    appimage: Path,
+    tmp_path: Path,
+) -> None:
+    expected_hash = hashlib.sha512(b"dummy content").hexdigest()
+    checksum_file = write_checksum(
+        tmp_path,
+        f"{expected_hash}  {APPIMAGE_NAME}\n",
+    )
+
+    result, warnings = verify_downloaded_appimage(
+        appimage,
+        make_asset(),
+        checksum_file,
+    )
+
+    assert result.status is VerificationStatus.VERIFIED
+    assert result.method == "checksum_file"
+    assert result.expected_hash == expected_hash
+    assert result.actual_hash == expected_hash
+    assert result.source_file == str(checksum_file)
+    assert warnings == []
+
+
+def test_verify_rejects_unexpected_parsed_hash_length(
+    appimage: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checksum_file = write_checksum(tmp_path, "synthetic checksum\n")
+
+    def return_invalid_hash(_content: str, _target_name: str) -> str:
+        return "a" * 65
+
+    monkeypatch.setattr(
+        verify_module,
+        "_parse_checksum_file",
+        return_invalid_hash,
+    )
+
+    result, warnings = verify_downloaded_appimage(
+        appimage,
+        make_asset(),
+        checksum_file,
+    )
+
+    assert result.status is VerificationStatus.MISSING
+    assert warnings == []
