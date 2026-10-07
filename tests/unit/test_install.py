@@ -829,8 +829,15 @@ def test_install_raises_systemexit_1_when_any_target_fails() -> None:
         ("ytmdesktop", make_package_error("ytmdesktop")),
     ]
 
+    def fake_run(coro):
+        # simulate async.run() actually draining the coroutine to
+        # completion, recording that both "installs" ran, before install()
+        # ever gets to look at results
+        coro.close()
+        return results
+
     with (
-        patch("appman.install.asyncio.run", return_value=results),
+        patch("appman.install.asyncio.run", side_effect=fake_run),
         pytest.raises(SystemExit) as exc_info,
     ):
         install(["https://github.com/pbek/QOwnNotes", "https://x/y"])
@@ -847,7 +854,14 @@ def test_install_returns_none_when_all_targets_succeed() -> None:
         ("AppFlowy", "v0.11.1"),
     ]
 
-    with patch("appman.install.asyncio.run", return_value=results):
+    def fake_run(coro):
+        # simulate async.run() actually draining the coroutine to
+        # completion, recording that both "installs" ran, before install()
+        # ever gets to look at results
+        coro.close()
+        return results
+
+    with patch("appman.install.asyncio.run", side_effect=fake_run):
         outcome = install(["https://x/y", "https://x/z"])
 
     assert outcome is None
@@ -903,7 +917,15 @@ def test_install_partitions_successes_and_failures_correctly(
     actually inspects `urls` beyond passing it into the (unexecuted)
     coroutine. Any non-empty list works identically here.
     """
-    with patch("appman.install.asyncio.run", return_value=results):
+
+    def fake_run(coro):
+        # simulate async.run() actually draining the coroutine to
+        # completion, recording that both "installs" ran, before install()
+        # ever gets to look at results
+        coro.close()
+        return results
+
+    with patch("appman.install.asyncio.run", side_effect=fake_run):
         if expected_failed_count > 0:
             with pytest.raises(SystemExit) as exc_info:
                 install(["https://github.com/pbek/QOwnNotes"])
@@ -929,6 +951,13 @@ def test_install_prints_a_warning_for_each_dedupe_warning() -> None:
     )
     deduped_urls = ["https://github.com/pbek/QOwnNotes"]
 
+    def fake_run(coro):
+        # simulate async.run() actually draining the coroutine to
+        # completion, recording that both "installs" ran, before install()
+        # ever gets to look at results
+        coro.close()
+        return [("QOwnNotes", "v1.0.0")]
+
     with (
         patch(
             "appman.install._dedupe_urls",
@@ -936,7 +965,7 @@ def test_install_prints_a_warning_for_each_dedupe_warning() -> None:
         ),
         patch(
             "appman.install.asyncio.run",
-            return_value=[("QOwnNotes", "v1.0.0")],
+            side_effect=fake_run,
         ),
         patch("appman.install._print_package_warning") as mock_print_warn,
     ):
@@ -960,6 +989,14 @@ def test_install_prints_nothing_when_no_dedupe_warnings() -> None:
     dedup at all (it may still be called later for download warnings,
     but not from this loop with an empty list).
     """
+
+    def fake_run(coro):
+        # simulate async.run() actually draining the coroutine to
+        # completion, recording that both "installs" ran, before install()
+        # ever gets to look at results
+        coro.close()
+        return [("QOwnNotes", "v1.0.0")]
+
     with (
         patch(
             "appman.install._dedupe_urls",
@@ -967,7 +1004,7 @@ def test_install_prints_nothing_when_no_dedupe_warnings() -> None:
         ),
         patch(
             "appman.install.asyncio.run",
-            return_value=[("QOwnNotes", "v1.0.0")],
+            side_effect=fake_run,
         ),
         patch("appman.install._print_package_warning") as mock_print_warn,
     ):
