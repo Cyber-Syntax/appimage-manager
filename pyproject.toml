@@ -6,7 +6,7 @@ description = 'appimage-manager is a command-line tool to manage AppImages on Li
 keywords = ["appimage", "appimage-manager"]
 requires-python = ">= 3.12"
 authors = [{ name = "Cyber-Syntax" }]
-dependencies = ["aiohttp>=3.12", "orjson>=3.10"]
+dependencies = ["aiohttp>=3.12", "orjson>=3.10", "PyYAML>=6.0"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
