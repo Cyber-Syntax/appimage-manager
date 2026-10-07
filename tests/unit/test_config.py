@@ -1,11 +1,21 @@
 """Unit test for config module.
 
-How pytest handles:
-    Setup phase: When a test requests the patched_constants fixture, pytest calls the fixture function. The code runs up to the yield statement. During this phase, the with block is entered, and the patching is applied. At the yield, the fixture pauses and returns the object mock_dirs to the test.
+How pytest handles the fixture:
+    Setup phase: When a test requests the patched_constants fixture, pytest
+        calls the fixture function. The code runs up to the yield statement.
+        During this phase, the with block is entered, and the patching is
+        applied. At the yield, the fixture pauses and returns the object
+        mock_dirs to the test.
 
-    Test execution: The test receives the mock_dirs dictionary (the same dictionary that was created by the mock_dirs fixture). The test can use these mocks if needed. All code inside the test that references appman.config.CONFIG_DIR will see the mock, not the real path.
+    Test execution: The test receives the mock_dirs dictionary (the same
+        dictionary that was created by the mock_dirs fixture).
+        The test can use these mocks if needed. All code inside the test that
+        references appman.config.CONFIG_DIR will see the mock, not the real path
 
-    Teardown phase: After the test finishes (successfully or with an error), pytest resumes the fixture function immediately after the yield. The with block exits, causing patch.multiple to restore all the original constants. The fixture then ends.
+    Teardown phase: After the test finishes (successfully or with an error),
+    pytest resumes the fixture function immediately after the yield. The with
+    block exits, causing patch.multiple to restore all the original constants.
+    The fixture then ends.
 """
 
 from __future__ import annotations
