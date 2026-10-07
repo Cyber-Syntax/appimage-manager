@@ -60,7 +60,8 @@ def test_real_checksum_fixtures(
     appimage_path = tmp_path / appimage_name
     appimage_path.write_bytes(b"fixture AppImage payload")
 
-    def return_fixture_hash(_path: Path, _algorithm: str) -> str:
+    def return_fixture_hash(_path: Path, actual_algorithm: str) -> str:
+        assert actual_algorithm == algorithm
         return expected_hash
 
     monkeypatch.setattr(
