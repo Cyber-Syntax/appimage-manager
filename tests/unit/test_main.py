@@ -139,7 +139,11 @@ def test_main_does_not_swallow_init_config_failure() -> None:
     catch and hide that — a broken XDG setup should surface as a real
     crash, not silently continue into parsing with missing directories.
     """
+    fake_args = argparse.Namespace()
+
     with (
+        patch("appman.main.create_parser", return_value=fake_parser),
+        patch("appman.main.parse_args", return_value=fake_args),
         patch("appman.main.init_console_log") as mock_init_console_log,
         patch(
             "appman.main.init_config", side_effect=OSError("permission denied")
