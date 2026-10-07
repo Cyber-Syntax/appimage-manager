@@ -199,6 +199,7 @@ def verify_downloaded_appimage(
         checksum_status,
     )
     # mismatch on either method blocks, regardless of the other
+    # source_file: only set if checksum file was used, not for digest
     if VerificationStatus.FAILED in (digest_status, checksum_status):
         failed_via_digest = digest_status == VerificationStatus.FAILED
         result = ChecksumResult(
@@ -208,7 +209,9 @@ def verify_downloaded_appimage(
             if failed_via_digest
             else expected_from_file,
             actual_hash=computed_hash,
-            source_file=str(checksum_path) if checksum_path else None,
+            source_file=str(checksum_path)
+            if not failed_via_digest and checksum_path
+            else None,
         )
         return result, warnings
 
@@ -231,7 +234,10 @@ def verify_downloaded_appimage(
             method=method,
             expected_hash=appimage_asset.digest or expected_from_file,
             actual_hash=computed_hash,
-            source_file=str(checksum_path) if checksum_path else None,
+            source_file=str(checksum_path)
+            if method in ("checksum_file", "digest+checksum_file")
+            and checksum_path
+            else None,
         )
         logger.debug("Verification passed: %s", result)
         return result, warnings
@@ -242,7 +248,7 @@ def verify_downloaded_appimage(
         method=None,
         expected_hash=None,
         actual_hash=None,
-        source_file=str(checksum_path) if checksum_path else None,
+        source_file=None,
     )
     logger.debug("Verification missing: %s", result)
     return result, warnings
