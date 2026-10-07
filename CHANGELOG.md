@@ -21,16 +21,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Associated checksum-file detection.
 - GitHub API embedded SHA256 digest support.
 - Checksum-file parsing and SHA256 verification.
+- Electron based manifest (latest-linux.yml) verification support.
 - Detection of checksum mismatches and corrupt checksum files.
 - Structured error and warning codes with centralized messages.
 - Concurrent multi-target installation processing.
 - Duplicate GitHub target detection and warnings.
-- Bounded API and download concurrency.
+- Bounded API and download concurrency limits.
 - Streaming asset downloads with temporary `.part` files.
 - Atomic download completion using file replacement.
 - Persisting GitHub release metadata as a JSON snapshot.  
 - Default configuration, data, cache, backup, catalog, AppImage, and log directories under standard XDG paths.  
 - File and stderr logging with rotating log files.
+- Make verified appimage executable before moving
 - Move verified appimages to persistent dir
+- Remove appimage if appimage corrupted
+- Use cache dir for first installation of appimage/checksum files
 
 [0.1.0-alpha]: https://github.com/Cyber-Syntax/appimage-manager/compare/v0.1.0-alpha...HEAD
