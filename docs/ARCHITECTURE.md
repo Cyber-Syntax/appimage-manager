@@ -250,7 +250,8 @@ has checksum_file/digest?
   yes → verify
           found both → 
                 passed both → status=VERIFIED
-                fail one, pass other → status=VERIFIED (warn failed method)
+                fail one, pass other → status=PARTIAL_VERIFIED (warn failed method and ask user for approval to continue because one method is real mismatch)
+          found only one, verified one → status=PARTIAL_VERIFIED (warn missing method)
           fail both → prompt: install-without-verify or abort [y/n] -> status=FAILED
                    y → install continues, status=FAILED (user can later re-verify, status saved as failed in per-app JSON but next install still would ask the same question again if fails)
                    n → abort, remove corrupted appimage
