@@ -20,20 +20,24 @@ logger = logging.getLogger(__name__)
 # TODO: add yml support
 # TODO: add PARTIAL_VERIFIED support (e.g. digest verified but checksum file failed or other way around)
 
-# Matches standard `sha256sum`/`shasum`-style output lines:
+# Matches standard `sha256sum/sha512sum`/`shasum`-style output lines:
 #   <64-hex-char-hash>  <filename>
+#   <128-hex-char-hash>  <filename>
 #   <64-hex-char-hash> *<filename>      (asterisk = binary mode marker)
 # Filename may contain spaces, so it's greedy to end-of-line rather than
 # split on whitespace.
-_CHECKSUM_LINE_RE = re.compile(r"^([0-9a-fA-F]{64})\s+\*?(.+)$")
+_CHECKSUM_LINE_RE = re.compile(
+    r"^([0-9a-fA-F]{64}|[0-9a-fA-F]{128})\s+\*?(.+)$"
+)
+# Matches a bare hash with no filename, which is valid for .DIGEST files.
+_HASH_RE = re.compile(r"^[0-9a-fA-F]+$")
 
 
 def _parse_checksum_file(content: str, target_name: str) -> str | None:
-    """Extract the hash for 'target_name' from checksum_file contents.
+    """Extract a sha256 or sha512 hash for target_name.
 
-    Handles `sha256sum`-style lines (`<hash>  <filename>`) and bare-hash
-    `.DIGEST` files with no filename. Returns None if unparseable — caller
-    records CHECKSUM_FILE_CORRUPT, not a hard failure.
+    Handles `sha256sum/sha512sum`-style lines (`<hash>  <filename>`) and
+    bare-hash `.DIGEST` files with no filename.
 
     Args:
         content: The text of the checksum file.
@@ -41,12 +45,24 @@ def _parse_checksum_file(content: str, target_name: str) -> str | None:
 
     Returns:
         The hash string if found, or None if not found or unparseable.
+        Caller records CHECKSUM_FILE_CORRUPT as a warning if None is returned.
     """
     lines = [line.strip() for line in content.splitlines() if line.strip()]
 
-    if len(lines) == 1 and re.fullmatch(r"[0-9a-fA-F]{64}", lines[0]):
-        logger.debug("Checksum file is a bare hash: %s", lines[0])
-        return lines[0]
+    if len(lines) == 1 and _HASH_RE.fullmatch(lines[0]):
+        if len(lines[0]) == 64:
+            logger.debug(
+                "Checksum file is a bare SHA256 hash for target: %s",
+                lines[0],
+            )
+            return lines[0]
+        if len(lines[0]) == 128:
+            logger.debug(
+                "Checksum file is a bare SHA512 hash for target: %s",
+                lines[0],
+            )
+            return lines[0]
+        return None
 
     for line in lines:
         match = _CHECKSUM_LINE_RE.match(line)
@@ -59,9 +75,27 @@ def _parse_checksum_file(content: str, target_name: str) -> str | None:
         hash_value, filename = match.groups()
         filename = filename.strip()
 
+        if len(hash_value) == 64:
+            logger.debug(
+                "Checksum file line is a SHA256 hash for target: %s -> %s",
+                filename,
+                hash_value,
+            )
+        elif len(hash_value) == 128:
+            logger.debug(
+                "Checksum file line is a SHA512 hash for target: %s -> %s",
+                filename,
+                hash_value,
+            )
+        else:
+            logger.warning(
+                "Checksum file line has unexpected hash length: %s", line
+            )
+            continue
+
         # Checksum files may contain paths such as ./releases/app.AppImage.
         # Match the exact basename, not a suffix.
-        if Path(filename).name == target_name:
+        if Path(filename.strip()).name == target_name:
             logger.debug(
                 "Checksum file line matches target: %s -> %s",
                 filename,
@@ -176,22 +210,31 @@ def verify_downloaded_appimage(
                     )
                 )
             else:
-                logger.debug(
-                    "Checksum file parsed successfully: %s -> %s",
-                    checksum_path,
-                    expected_from_file,
-                )
-                if computed_hash is None:
-                    logger.debug(
-                        "Computing SHA256 for AppImage since not done yet: %s",
-                        appimage_path,
+                checksum_hash: str | None
+
+                if len(expected_from_file) == 64:
+                    logger.debug("Computing SHA256 for checksum verification")
+                    checksum_hash = _sha256_file(appimage_path)
+                elif len(expected_from_file) == 128:
+                    logger.debug("Computing SHA512 for checksum verification")
+                    checksum_hash = _sha512_file(appimage_path)
+                else:
+                    logger.warning(
+                        "Checksum file has unexpected hash length: %d",
+                        len(expected_from_file),
                     )
-                    computed_hash = _sha256_file(appimage_path)
-                checksum_status = (
-                    VerificationStatus.VERIFIED
-                    if computed_hash.lower() == expected_from_file.lower()
-                    else VerificationStatus.FAILED
-                )
+                    checksum_hash = None
+
+                if checksum_hash is not None:
+                    checksum_status = (
+                        VerificationStatus.VERIFIED
+                        if checksum_hash.lower() == expected_from_file.lower()
+                        else VerificationStatus.FAILED
+                    )
+
+                    # Keep the checksum hash for checksum-only results.
+                    if computed_hash is None:
+                        computed_hash = checksum_hash
 
     logger.debug(
         "Verification results: digest=%s, checksum_file=%s",
@@ -266,6 +309,29 @@ def _sha256_file(path: Path) -> str:
     hasher = hashlib.sha256()
 
     logger.debug("Computing SHA256 for file: %s", path)
+
+    # Read the file in chunks to avoid loading the entire file into memory
+    with path.open("rb") as fh:
+        while True:
+            chunk = fh.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _sha512_file(path: Path) -> str:
+    """Compute the SHA512 hash of a file.
+
+    Args:
+        path: The path to the file to hash.
+
+    Returns:
+        The SHA512 hash of the file as a hex string.
+    """
+    hasher = hashlib.sha512()
+
+    logger.debug("Computing SHA512 for file: %s", path)
 
     # Read the file in chunks to avoid loading the entire file into memory
     with path.open("rb") as fh:
