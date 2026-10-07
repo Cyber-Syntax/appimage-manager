@@ -10,9 +10,6 @@ from appman.verify import verify_downloaded_appimage
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
 
-# TODO(next release): add latest-linux.yml after YAML checksum parsing support
-# is implemented.
-
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -63,12 +60,12 @@ def test_real_checksum_fixtures(
     appimage_path = tmp_path / appimage_name
     appimage_path.write_bytes(b"fixture AppImage payload")
 
-    def return_fixture_hash(_path: Path) -> str:
+    def return_fixture_hash(_path: Path, _algorithm: str) -> str:
         return expected_hash
 
     monkeypatch.setattr(
         verify_module,
-        f"_{algorithm}_file",
+        "_compute_file_hash",
         return_fixture_hash,
     )
 
@@ -122,4 +119,45 @@ def test_neovim_appimage_matches_github_digest() -> None:
     assert result.status is VerificationStatus.VERIFIED
     assert result.method == "digest"
     assert result.actual_hash == appimage_asset.digest
+    assert warnings == []
+
+
+@pytest.mark.integration
+def test_latest_linux_yml_matches_appimage(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    appimage_name = "superProductivity-x86_64.AppImage"
+    appimage_path = tmp_path / appimage_name
+    appimage_path.write_bytes(b"fixture AppImage payload")
+    expected_hash = (
+        "2e8b673a230613a10c22932e0b95eed4a405d65000b2174384455de8de0f00fe6"
+        "f0e8cd18cd61c9855517946198f5b7530f6695b04d6cc47d0745dc74a971b85"
+    )
+
+    def return_fixture_hash(_path: Path, _algorithm: str) -> str:
+        return expected_hash
+
+    monkeypatch.setattr(
+        verify_module,
+        "_compute_file_hash",
+        return_fixture_hash,
+    )
+
+    result, warnings = verify_downloaded_appimage(
+        appimage_path,
+        Asset(
+            name=appimage_name,
+            download_url="https://example.com/app.AppImage",
+            size=appimage_path.stat().st_size,
+            asset_type="AppImage",
+            digest=None,
+        ),
+        FIXTURES / "latest-linux.yml",
+    )
+
+    assert result.status is VerificationStatus.VERIFIED
+    assert result.method == "checksum_file"
+    assert result.expected_hash == expected_hash
+    assert result.actual_hash == expected_hash
     assert warnings == []
