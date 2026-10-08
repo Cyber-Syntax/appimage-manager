@@ -136,7 +136,7 @@ async def fetch_latest_release(
     async with get_concurrency_limits().api:
         try:
             # NOTE: session.get() doesn't fetch anything by itself
-            # enterin "async with" is what actually send the request
+            # entering "async with" is what actually send the request
             # and pauses this task until the response HEADERS come back.
             # Other tasks run while we wait here.
             async with session.get(
@@ -313,6 +313,7 @@ def cache_release_data(
     """
     cache_path = CACHE_DIR / f"{owner}_{repo}_latest.json"
 
+    # wb: write binary mode, overwriting the file if it exists
     with cache_path.open("wb") as file:
         _ = file.write(orjson.dumps(data))
     logger.debug("Cached release data to: %s", cache_path)
@@ -341,9 +342,18 @@ def select_appimage_asset(
         PackageError: If no suitable AppImage is found.
     """
     logger.debug("Selecting AppImage asset from %d assets", len(assets))
+
+    # Parse the raw assets into Asset objects, classifying them as AppImage,
+    # checksum file, or other type. This is a one-time pass over the list.
     parsed = [parse_asset(raw) for raw in assets]
 
+    # Select the best AppImage asset based on platform compatibility, stability,
+    # and architecture. If no suitable AppImage is found, return a PackageError.
     appimage = _select_best_appimage(parsed, package)
+
+    # If a PackageError was returned, propagate it up to the caller.
+    # Otherwise, proceed to select a matching checksum file for the
+    # chosen AppImage.
     if isinstance(appimage, PackageError):
         return appimage
 
@@ -359,7 +369,7 @@ def select_appimage_asset(
 def _select_best_appimage(
     parsed: list[Asset], package: str
 ) -> Asset | PackageError:
-    """Run the appimage-only selection pipeline (platform -> stability -> arch.
+    """Run the appimage-only selection pipeline: platform -> stability -> arch.
 
     Args:
         parsed: The full list of classified assets from the release.
@@ -369,8 +379,15 @@ def _select_best_appimage(
         Asset: The best-matching AppImage asset.
         PackageError: If no suitable AppImage is found.
     """
-    appimages = [a for a in parsed if a.asset_type == AssetType.APPIMAGE]
-    matches = [a for a in appimages if not is_incompatible_platform(a.name)]
+
+    # Filter the parsed assets to find only those that are AppImage files and
+    # are compatible with the current platform.
+    matches = [
+        a
+        for a in parsed
+        if a.asset_type == AssetType.APPIMAGE
+        and not is_incompatible_platform(a.name)
+    ]
     logger.debug("Found %d match AppImage assets", len(matches))
 
     if not matches:
@@ -382,15 +399,25 @@ def _select_best_appimage(
             retryable=True,
         )
 
+    # Filter the matches to find only those that are stable (not marked as
+    # beta, alpha, nightly, etc.).
     stable = [a for a in matches if not is_unstable(a.name)]
+
     # keep all beta apps to support freetube and similar always beta apps
     matches = stable or matches
     logger.debug("Final match AppImage assets: %d", len(matches))
 
-    return next(
-        (a for a in matches if is_amd64(a.name)),
-        matches[0],
-    )
+    # Prefer an AMD64 AppImage if one is available, otherwise return the first
+    # match as a fallback. This is a best-effort heuristic; some upstreams
+    # may not follow the x86_64/amd64 naming convention, so we don't
+    # fail if no AMD64 AppImage is found, we just log a debug message and return
+    # the first match.
+    amd64_matches = [a for a in matches if is_amd64(a.name)]
+
+    # Return the first AMD64 match if available, otherwise return the
+    # first match as a fallback. This is a best-effort heuristic; some upstreams
+    # may not follow the x86_64/amd64 naming convention
+    return amd64_matches[0] if amd64_matches else matches[0]
 
 
 def _select_matching_checksum_file(
@@ -417,36 +444,49 @@ def _select_matching_checksum_file(
         The matching checksum Asset, or None if the release has no
         usable checksum/digest file — a normal, expected outcome.
     """
+    # Filter the parsed assets to find only those that are checksum files and
+    # are compatible with the current platform.
     candidates = [
         a
         for a in parsed
         if a.asset_type == AssetType.CHECKSUM_FILE
         and not is_incompatible_platform(a.name)
     ]
-    # TODO: might be need to return PackageError?
+
+    # return None instead of a PackageError because caller is
+    # responsible for handling the case where no checksum file is found.
     if not candidates:
+        logger.debug("No checksum file candidates found for %s", appimage.name)
         return None
 
-    per_file = next(
-        (
-            c
-            for c in candidates
-            # + "." to avoid matching "KeePassXC-2.7.10-x86_64.AppImage-beta.sha256"
-            if c.name.lower().startswith(appimage.name.lower() + ".")
-        ),
-        None,
-    )
-    if per_file is not None:
-        return per_file
+    # Prefer a checksum file that matches the selected AppImage by name.
+    # The "." ensures we only match names such as:
+    # "KeePassXC-2.7.10-x86_64.AppImage.sha256sum"
+    # and not:
+    # "KeePassXC-2.7.10-x86_64.AppImage-beta.sha256"
+    target_prefix = appimage.name.lower() + "."
 
-    return next(
-        (
-            c
-            for c in candidates
-            if c.name.lower() in _RELEASE_WIDE_CHECKSUM_NAMES
-        ),
-        None,
-    )
+    # first priority: per-file checksum that matches the AppImage name
+    for candidate in candidates:
+        if candidate.name.lower().startswith(target_prefix):
+            logger.debug(
+                "Found per-file checksum match: %s for AppImage: %s",
+                candidate.name,
+                appimage.name,
+            )
+            return candidate
+
+    # second priority: release-wide checksum manifest
+    for candidate in candidates:
+        if candidate.name.lower() in _RELEASE_WIDE_CHECKSUM_NAMES:
+            logger.debug(
+                "Found release-wide checksum match: %s for AppImage: %s",
+                candidate.name,
+                appimage.name,
+            )
+            return candidate
+
+    return None
 
 
 def parse_asset(raw: ReleaseAsset) -> Asset:
@@ -508,8 +548,19 @@ def is_incompatible_platform(name: str) -> bool:
         False otherwise.
     """
     lower = name.lower()
+
+    # Check for embedded incompatible extensions first
     if _EMBEDDED_INCOMPATIBLE_EXT_RE.search(lower):
         return True
+
+    # try every incompatible platform pattern in the list, and return True
+    # if any matches, otherwise return False.
+    # re.search() returns a match object if the pattern is found,
+    # otherwise None.
+    # any() returns True if any pattern matches, otherwise False
+    # if loop found a match in first pattern, it will not check the rest of
+    # the patterns, so it never allocates a list of all matches, which is more
+    # efficient than using a list comprehension.
     return any(
         re.search(pattern, lower) for pattern in INCOMPATIBLE_PLATFORM_PATTERNS
     )
@@ -525,6 +576,8 @@ def is_unstable(name: str) -> bool:
         True if the asset indicates an unstable version, False otherwise.
     """
     lower = name.lower()
+
+    # Check for unstable version keywords in the asset name
     return any(kw in lower for kw in UNSTABLE_VERSION_KEYWORDS)
 
 
