@@ -5,6 +5,9 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange?style=flat-square)](https://github.com/Cyber-Syntax/appimage-manager)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 
+> [!NOTE]
+> New rewrite of old repository [my-unicorn](https://github.com/Cyber-Syntax/my-unicorn) with a focus on better maintainable codebase with functional programming and a more robust testing suite.
+
 **appman** is a Linux-first command-line AppImage manager. It discovers
 AppImages from GitHub releases, selects the most suitable Linux asset, downloads
 it concurrently, and verifies it with GitHub's embedded SHA256 digest or a
@@ -22,12 +25,9 @@ published checksum file.
 ## Features
 
 - Install one or more AppImages from GitHub repository URLs.
-- Resolve the latest GitHub release through the REST API.
-- Prefer Linux AppImage assets and x86_64/AMD64 builds.
-- Exclude Windows, macOS, ARM, source, and other incompatible assets.
-- Prefer stable assets when both stable and prerelease-like names exist.
-- Detect matching checksum assets, including release-wide manifests.
-- Verify GitHub API SHA256 digests and checksum files.
+- Prefer Linux AppImage assets and x86_64/AMD64 builds and exclude other platforms.
+- Prefer stable releases over pre-releases but allow always beta/alpha releases.
+- Verify GitHub API SHA256 digests and checksum files(e.g latest-linux.yml, SHA256SUMS.txt, AppImage.sha256, AppImage.DIGEST).
 - Report structured errors and warnings for network, asset, and verification
  outcomes.
 - Download AppImages as streamed chunks using temporary `.part` files and
@@ -36,6 +36,7 @@ published checksum file.
  concurrency.
 - Deduplicate repeated GitHub repositories in one command.
 - Cache fetched release metadata locally.
+- Make appimage executable if verification passes and move it to the XDG appimage directory.
 
 ## Prerequisites
 
